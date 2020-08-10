@@ -1,0 +1,50 @@
+Function Get-PrintLog {
+    <#
+        .SYNOPSIS
+        Scrapes print jobs from a server.
+
+        .DESCRIPTION
+        Gets a log of who printed what from where on a print server
+
+        .PARAMETER printserver
+        Name of the print server to query
+
+        .EXAMPLE
+        Get-PrintLog -printserver PrintServer1 | Out-GridView
+
+        Polls that print server for all print jobs to return.
+        .EXAMPLE
+        $op = Get-PrintLog -printserver PrintServer1 | Sort-Object -Property Printer,Computer,User
+        $op | Out-GridView
+        $op | ConvertTo-CSV -NoTypeInformation | & "$env:windir\system32\clip.exe"
+
+        Get the printlog, sort, output to gridview, and also send to clipboard to be pasted in excel
+    #>
+    param (
+        [Parameter(Mandatory,HelpMessage='Name of the print server:')]
+        $printserver
+    )
+    $LogOutput = Invoke-Command -ComputerName $printserver -ScriptBlock {
+        $filter = @{
+            LogName   = 'Microsoft-Windows-PrintService/Operational'
+            ID        = 307
+            StartTime = [datetime]::today
+        }
+        $printjobs = @()
+        $null = Get-WinEvent -FilterHashtable $filter | ForEach-Object {
+            $xml      = [xml]$_.ToXml()
+            $printjob = [pscustomobject]@{
+                DateTime = [datetime]$xml.Event.System.TimeCreated.SystemTime
+                Document = $xml.Event.UserData.DocumentPrinted.Param2
+                User     = $xml.Event.UserData.DocumentPrinted.Param3
+                Computer = $xml.Event.UserData.DocumentPrinted.Param4
+                Printer  = $xml.Event.UserData.DocumentPrinted.Param5
+                Pages    = $xml.Event.UserData.DocumentPrinted.Param8
+            }
+            $printjobs += $printjob
+        }
+        Return $printjobs
+    }
+    $LogOutput = $LogOutput | Select-Object -Property DateTime,Document,User,Computer,Printer,Pages
+    Return $LogOutput
+}
