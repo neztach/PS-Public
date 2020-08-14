@@ -1,0 +1,129 @@
+Function Set-EmployeeID {
+    <#
+      .SYNOPSIS
+      Set employeeId from the License on the Description line
+      .DESCRIPTION
+      If The Description field in AD ends with a space and finally their 
+      employeeid, then that last description string value will be scraped and entered 
+      into the employeeid field.
+      .PARAMETER fix
+      By using the -fix parameter the script assumes to mean to repair and not just report.
+      If you don't follow -fix with -user the script will assume you mean all users.
+      .PARAMETER user
+      By adding the -user parameter after the -fix parameter, you are specifying a single user
+      instead of all users.
+      .PARAMETER username
+      After you've chosen to -fix, and specified one -user, the username is how you identify 
+      who you want to fix
+      .EXAMPLE
+      Set-EmployeeID -fix -user -username john.smith
+
+      The script will get-aduser on john.smith and use the last string on the 
+      description field to populate employeeid
+      .EXAMPLE
+      Set-EmployeeId
+
+      The script will assume you mean to check the status of users and will
+      return all users who's employeeid field doesn't match the last string in
+      their description field.
+      .NOTES
+      Users being targetted are those who's description field isn't null nor does
+      it match 'util', but in-fact *does* match 'CNL' or 'CNP'.
+    #>
+    [CmdletBinding()]
+    Param (
+        [switch]$fix,
+        [switch]$user,
+        [string]$username
+    )
+    $Verify = 0
+    Function Get-TargetUsers {
+        ### Determine target users are
+        Get-ADUser -Filter {Enabled -eq $true} -prop Company,Description,EmployeeID | 
+        Select-Object -Property SamAccountName,@{n='License';e={$_.Description.Split(' ')[-1].Trim()}},Company,Description,EmployeeID | 
+        Where-Object {$_.Description -NE $null} | 
+        Where-Object {$_.Description -NotMatch 'util'} | 
+        Where-Object {$_.Description -Match 'CNL|CNP'} | 
+        Select-Object -Property SamAccountName,License,EmployeeID | 
+        Where-Object {$_.License -NE $_.EmployeeID}
+    }
+
+    ### store target users samaccountname and license in an array
+    $current = Get-TargetUsers
+
+    If ($fix){
+        ### select only users with no employeeid
+        #$current = $current | Where-Object {$_.EmployeeID -EQ $null}
+        If ($user){
+            Function Get-Single {
+                [CmdletBinding()]
+                Param ($sTarget)
+                Get-ADUser -Identity $sTarget -Properties Company,Description,EmployeeID | 
+                Select-Object -Property SamAccountName,@{n='License';e={$_.Description.Split('-')[-1].Trim()}},EmployeeId
+            }
+            $single = Get-Single $username
+            $single | ForEach-Object{
+                Set-ADUser $($_.SamAccountName) -EmployeeID $($_.License)
+                Write-Host "$($_.SamAccountName) EmployeeID Set" -ForegroundColor Yellow
+                $changed += New-Object -TypeName PSCustomObject -Property ([ordered]@{
+                    'SamAccountName' = $single.SamAccountName
+                    'Before'         = $single.EmployeeId
+                    'After'          = $single.License
+                })
+            }
+            #verify
+            If ($((Get-Single $username).License).trim() -ne $((Get-Single $username).EmployeeId).trim()){
+                $Verify++
+                $Return = Get-Single $username
+            }
+        } else {
+            If ($current.Count -gt 0){
+                $Changed = @()
+                $current | ForEach-Object{
+                    Set-ADUser $($_.SamAccountName) -EmployeeID $($_.License)
+                    Write-Host "$($_.SamAccountName) -EmployeeID Set"
+                    $changed += New-Object -TypeName PSCustomObject -Property ([ordered]@{
+                        'SamAccountName' = $_.SamAccountName
+                        'Before'         = If ($_.EmployeeId){$_.EmployeeId} else {'null'}
+                        'After'          = $_.License
+                    })
+                }
+                ### verify
+                If ((Get-TargetUsers).Count -gt 0){
+                    $Verify++
+                    $Return = $current
+                }
+            } else {
+                Break
+            }
+        }
+    } else {
+        If ($current.count -gt 0){
+            $Verify++
+            $Return = $current
+        }
+    }
+
+    If ($verify -gt 0){
+        Write-Host 'Targets Found' -ForegroundColor Yellow
+    } else {
+        If ($changed.count -gt 0){
+            Write-Host 'Targets Altered' -ForegroundColor Yellow
+        } else {
+            Write-Host 'No Targets Found' -ForegroundColor Green
+        }
+    }
+    
+    If ($changed){
+        $changed | Foreach-Object {
+            Write-Host "$($_.SamAccountName) - Before: " -NoNewLine
+            Write-Host "$($_.Before)" -NoNewLine -ForegroundColor Yellow
+            Write-Host ' - After: ' -NoNewLine
+            Write-Host "$($_.After)" -ForegroundColor Green
+        }
+    }
+    if ($Return){
+        Return $Return
+    }
+
+}
