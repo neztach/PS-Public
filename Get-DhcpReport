@@ -1,0 +1,42 @@
+Function Get-DHCPReport {
+    [CmdletBinding()]
+    Param ($server)
+    If (!$server){
+        $DHCPServers = Get-DhcpServerInDc
+    } else {
+        $DHCPServers = $server
+    }
+    $ResHash = New-Object -TypeName System.Collections.Arraylist
+    
+    ForEach ($DHCPServer in $DHCPServers.DnsName) {
+        $output = Get-DHCPServerV4Scope -ComputerName $DHCPServer | 
+                  Where-Object {$_.State -eq 'Active'} | 
+                  Where-Object {$_.ScopeId -notlike '172*'} | 
+                  ForEach-Object {Get-DHCPServerv4Lease -ComputerName $DHCPServer -ScopeID $_.ScopeID} | 
+                  Select-Object -Property @{n='Server';e={$DHCPServer.split('.')[0]}},
+                                          ScopeId,
+                                          IPAddress,
+                                          HostName,
+                                          ClientID,
+                                          AddressState
+        ForEach ($e in $output){
+            if ($e.AddressState -like "*Reservation"){
+                $res = 'Yes'
+            } else {
+                $res = 'No'
+            }
+            $null = $ResHash.add((New-Object -TypeName PSObject -Property @{
+                Server      = $e.Server
+                Scope       = $e.ScopeId
+                IPAddress   = $e.IPAddress
+                HostName    = $e.HostName
+                MAC         = $e.ClientId.replace('-',':').toupper()
+                State       = $e.AddressState
+                Reservation = $res
+           }))
+        }
+    }
+    $DHCPReportResults = $ResHash | Select-Object -Property Server,Scope,IPAddress,HostName,MAC,State,Reservation
+    Return $DHCPReportResults
+}
+Get-DHCPReport | Out-GridView
