@@ -1,0 +1,298 @@
+
+Function Get-AdminStatus {
+    $currentUser = New-Object -TypeName Security.Principal.WindowsPrincipal -ArgumentList $([Security.Principal.WindowsIdentity]::GetCurrent())
+    $currentUser.IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+}
+If ((Get-AdminStatus) -eq $false)  {
+    Start-Process -FilePath powershell.exe -Verb RunAs -ArgumentList ('-ExecutionPolicy Bypass -NoExit -File "{0}"' -f ($myinvocation.MyCommand.Definition))
+    #Exit
+}
+
+
+
+Function Get-Calcsize{
+    <#
+      .SYNOPSIS
+      Calculate the size of the staging area
+      .DESCRIPTION
+      Using the suggested formula from Microsoft, calculate the size the staging area should be for a share.
+      .PARAMETER path
+      Path is required.  Tells the script what the local path to the share is.
+      .EXAMPLE
+      Get-Calcsize -Path F:\Depts\Accounting
+      Will show you the exact size of the largest 32 files added together.
+      Will also show you that size rounded up to the nearest gig.
+      Will also display the amount to put in staging, while also copying that to your clipboard.
+      .NOTES
+      This uses Microsoft's suggested formula, but that doesn't mean they are always correct.
+      This is more of a suggested starting point
+      .INPUTS
+      Literal drive paths only "<drive letter>:\<path to the share>"
+    #>
+    [CmdletBinding()]
+    param ($path)
+    Write-Host 'Calculating Staging Size for ' -NoNewLine -ForegroundColor DarkYellow
+    Write-Host $path
+
+    $ExactSize        = (Get-ChildItem -Path $path -Recurse -Force | 
+                        Sort-Object -Property length -Descending | 
+                        Select-Object -first 32 | 
+                        Measure-Object -property length -sum).sum /1gb
+    $RoundedSize      = [int]($ExactSize)
+    $AmountForStaging = $roundedSize * 1024
+    $yel = 'Yellow'
+    Write-Host 'Exact Size: ' -NoNewLine -ForegroundColor $yel
+    Write-Host $ExactSize
+    Write-Host 'Rounding up: ' -NoNewLine -ForegroundColor $yel
+    Write-Host $RoundedSize -NoNewLine
+    Write-Host ' GB' -ForegroundColor $yel
+    If ($AmountForStaging -le 4096){
+        Write-Host 'Leave at default 4GB (4096)' -ForegroundColor Green
+        '4096' | & "$env:windir\system32\clip.exe"
+    } else {
+        Write-Host 'Recommended Size: ' -NoNewLine -ForegroundColor $yel
+        Write-Host $AmountForStaging -ForegroundColor Green
+        $AmountForStaging | & "$env:windir\system32\clip.exe"
+    }
+}
+#Get-calcsize "F:\drive\path"
+
+Function Start-DedupByForce{
+    <#
+      .SYNOPSIS
+      Instigates dedup maintenance (optimization/GarbageCollection/Scrubbing)
+      .DESCRIPTION
+      Instigates dedup maintenance (optimization/GarbageCollection/Scrubbing) on a 
+      drive and updates you every 5 minutes of the current progress.
+      .PARAMETER drive
+      Drive letter target to dedup
+      .PARAMETER oneoff
+      You can use this option to dedup a one-off drive.
+      It has a MinimumFileAgeDays set to 0
+      .EXAMPLE
+      Start-DedupByForce -drive "E:"
+      Instigates deduping of the drive (Optimization/GarbageCollection/Scrubbing)
+      Updates you every 5 minutes on-screen of the progress.
+    #>
+    [CmdletBinding()]
+    param ($drive,[switch]$oneoff)
+    If ($oneoff){
+        Set-DedupVolume -Volume $drive -MinimumFileAgeDays 0
+    }
+    Write-Output -InputObject 'Starting Dedup Jobs...'
+    $j = Start-DedupJob -Type Optimization      -Volume $drive
+    $j = Start-DedupJob -Type GarbageCollection -Volume $drive
+    $j = Start-DedupJob -Type Scrubbing         -Volume $drive
+ 
+    Do {
+        Write-Output -InputObject 'The Dedup jobs are running.  Status:'
+        $state = Get-DedupJob | Sort-Object -Property StartTime -Descending 
+        $state | Format-Table
+        if ($state -eq $null) {
+            Write-Output -InputObject 'Completing, please wait...'
+        }
+        Start-Sleep -Seconds 300
+    } while ($state -ne $null)
+ 
+    Write-Output -InputObject 'Done DeDuping'
+    Get-DedupStatus | Format-List -Property * | Where-Object {$_.Name -match $drive}
+}
+#Start-DedupForce "E"
+
+Function Get-DFSStatus {
+    <#
+      .SYNOPSIS
+      Get the current status of the backlog
+      .DESCRIPTION
+      Polls the file backlog in DFS to show you if it's current or behind and where.
+      .PARAMETER grid
+      Using the grid parameter sends all findings to out-gridview
+      .PARAMETER showall
+      Using the showall parameter indicates you want to see not only the unhealthy, but the healthy as well.
+      .EXAMPLE
+      Get-DFSStatus -showall
+      Will output the current backlog both incoming and outgoing for every share in the namespace.
+      WARNING: its a lot of info, easy to get lost in all the data.
+      .EXAMPLE
+      Get-DFSStatus
+      Will output only backlogs that aren't currently equal to zero (meaning no files waiting to be sync'd)
+      .EXAMPLE
+      Get-DFSStatus -grid
+      Will send backlog results to out-gridview where it may be easier to sort
+      of you also add the showall parameter you can get better insight into all servers that are a part of 
+      any given share in the namespace.
+    #>
+    [CmdletBinding()]
+    Param(
+        [switch]$grid,
+        [switch]$showall
+    )
+    ### Get a list of all replication groups
+    $RGroups = Get-WmiObject -Namespace 'root\MicrosoftDFS' -Query 'SELECT * FROM DfsrReplicationGroupConfig'
+    ### Get this computer's name
+    $ComputerName = $env:ComputerName
+    ### Set these variables to 0
+    $Succ = $Warn = $Err = 0
+    $output = New-Object -TypeName System.Collections.Arraylist
+
+    ForEach ($Group in $RGroups) {
+        ### Replication Group WMI Query
+        $RGFoldersWMIQ = "SELECT * FROM DfsrReplicatedFolderConfig WHERE ReplicationGroupGUID='" + $Group.ReplicationGroupGUID + "'"
+        ### Use Replication Group WMI Query to get a list of folders that are replicated
+        $RGFolders = Get-WmiObject -Namespace 'root\MicrosoftDFS' -Query  $RGFoldersWMIQ
+        ### Replication Group Connections WMI Query
+        $RGConnectionsWMIQ = "SELECT * FROM DfsrConnectionConfig WHERE ReplicationGroupGUID='"+ $Group.ReplicationGroupGUID + "'"
+        ### Use Replication Group Connections WMI Query to get a list of servers that are replicating this folder
+        $RGConnections = Get-WmiObject -Namespace 'root\MicrosoftDFS' -Query  $RGConnectionsWMIQ
+        ### For each connection (server) found with the Replication Group Connections WMI Query...
+        Foreach ($Connection in $RGConnections) {
+            ### Establish the name of the Replication Partner Server
+            $ConnectionName = $Connection.PartnerName.Trim()
+            ### Check if the connection is enabled, proceed with this part if it is...
+            if ($Connection.Enabled -eq $True) {
+                ### Verify we can currently communicate to the partner server in question, proceed if we can...
+                if (((New-Object -TypeName System.Net.NetworkInformation.ping).send("$ConnectionName")).Status -eq 'Success') {
+                    ### Iterate through the folders established in $RGFolders
+                    foreach ($Folder in $RGFolders) {
+                        ### Establish the current Replication Group Name and Folder Name
+                        $RGName = $Group.ReplicationGroupName
+                        $RFName = $Folder.ReplicatedFolderName
+                        ### If the connection to the partner server *is* an inbound connection...
+                        if ($Connection.Inbound -eq $True) {
+                            ### Establish the Name of the Connection and the name of the Receiving Replication Member.
+                            ### Specify the connection direction is inbound
+                            $SendingMember   = $ConnectionName
+                            $ReceivingMember = $ComputerName
+                            $Direction       = 'inbound'
+                        ### If the connection to the partner server *is NOT* an inbound connection...
+                        } else {
+                            ### Establish the Name of the Connection and the name of the Sending Replication Member.
+                            ### Specify the connection direction is outbound
+                            $SendingMember   = $ComputerName
+                            $ReceivingMember = $ConnectionName
+                            $Direction       = 'outbound'
+                        }
+                        ### Create the backlog query command from the variables assembled so far
+                        $BLCommand = "dfsrdiag Backlog /RGName:'" + $RGName + "' /RFName:'" + $RFName + "' /SendingMember:" + $SendingMember + ' /ReceivingMember:' + $ReceivingMember
+                        ### Run the BackLog Command we just made and store the results in $Backlog
+                        $Backlog = Invoke-Expression -Command $BLCommand
+                        ### Establish a Backlog Count variable and set value as zero
+                        $BackLogFilecount = 0
+                        ### Iterate through Backlogs found
+                        Foreach ($item in $Backlog) {
+                            ### For each entry in the Backlog, look for a line that contains "Backlog File count"
+                            if ($item -ilike '*Backlog File count*') {
+                                ### If the line for backlog file count is found, 
+                                ### split the line at the colon symbol, 
+                                ### keep the number (integer) that occurs after the colon and trim all white space
+                                $BacklogFileCount = [int]$Item.Split(':')[1].Trim()
+                            }
+                        }
+                        ### If the backlog count is zero...
+                        if ($BacklogFileCount -eq 0) {
+                            ### Set the color as White and increment successes by 1
+                            $Color = 'white'
+                            $Succ  = $Succ + 1
+                            ### If the backlog count is greater than zero, 
+                            ### but it is less than 10...
+                        } elseif ($BacklogFilecount -lt 10) {
+                            ### Set the color as Yellow and increment the warnings by 1
+                            $Color = 'yellow'
+                            $Warn  = $Warn + 1
+                            ### If the backlog count is greater than 10...
+                        } else {                                 
+                            $Color = 'red'
+                            ### Set the color as Red and increment the error count by 1
+                            $Err   = $Err + 1
+                        }
+                        ### If you used the ShowAll switch because you want to follow the 
+                        ### findings of the script as it progresses.
+                        If ($ShowAll){
+                            Write-Host "$BacklogFileCount files in backlog $SendingMember->$ReceivingMember for $RGName\$RFName" -fore $Color
+                        }
+                        $null = $output.add((New-Object -TypeName PSObject -Property @{
+                            Backlog   = $BacklogFileCount
+                            Sender    = $SendingMember
+                            Receiver  = $ReceivingMember
+                            Namespace = "$($RGName)\$($RFName)"
+                        }))
+                        ### Only show backlog for items that have a backlog and not the count 
+                        ### for everything that CAN have a backlog (backlog count greater than zero)
+                        If ($BackLogFilecount -gt 0){
+                            ### If you only want to focus on a specific site, adjust the command below and un-comment accordingly
+                            #If (($SendingMember -like "*site1*") -OR ($ReceivingMember -like "*site1*")){
+                            ### Output to screen any/all events where the backlog count is greater than zero
+                            Write-Host "$BacklogFileCount files in backlog $SendingMember->$ReceivingMember for $RGName\$RFName" -fore $Color
+                            #}
+                        }
+                    }
+                }
+            }
+        }
+    }
+    If ($grid){
+        $output | 
+        Select-Object -Property Backlog,
+                                Sender,
+                                Receiver,
+                                Namespace | 
+        Sort-Object -Property Namespace,Sender,Receiver | 
+        Out-GridView
+    }
+    ### Output current Date/Time to screen
+    Write-Host "$((Get-Date).ToString()) --- $($Succ) successful, "                    -NoNewLine
+    Write-Host "$Warn warnings "                                    -ForeGround Yellow -NoNewLine
+    Write-Host 'and '                                                                  -NoNewLine
+    Write-Host "$Err errors "                                       -ForeGround Red    -NoNewLine
+    Write-Host "from $($Succ+$Warn+$Err) replications."
+}
+
+Function Get-DDStatus{
+    <#
+      .SYNOPSIS
+      Simply tells you the current status of deduping if it is currently running.
+      .DESCRIPTION
+      Simply tells you the current status of deduping if it is currently running.
+      .EXAMPLE
+      Get-DDStatus
+      outputs current dedup status
+    #>
+    Get-DedupJob
+    Write-Host "`n$((Get-Date).ToString())"
+}
+
+Function Get-LocalShares {
+    Get-SmbShare -Special $false
+}
+
+Function Get-DFSReminder {
+    Write-Host '• Get-Calcsize        ' -NoNewLine
+    Write-Host 'Calculate staging size for share  ' -NoNewLine -ForegroundColor Yellow
+    Write-Host 'Usage: ' -NoNewLine
+    Write-Host "Get-Calcsize -Path `"F:\Depts\Accounting`"" -ForegroundColor Green
+    Write-Host '• Start-DedupByForce  ' -NoNewLine
+    Write-Host 'Instigate immediate dedup job     ' -NoNewLine -ForegroundColor Yellow
+    Write-Host 'Usage: ' -NoNewLine
+    Write-Host "Start-DedupByForce -drive `"E:`"   " -NoNewLine -ForegroundColor Green
+    Write-Host 'Options: ' -NoNewLine
+    Write-Host 'OneOff' -ForegroundColor Red
+    Write-Host '• Get-DFSStatus       ' -NoNewLine
+    Write-Host 'Get current DFS backlog           ' -NoNewLine -ForegroundColor Yellow
+    Write-Host 'Usage: ' -NoNewLine
+    Write-Host 'Get-DFSStatus                    ' -NoNewLine -ForegroundColor Green
+    Write-Host 'Options: ' -NoNewLine
+    Write-Host 'showall/grid' -ForegroundColor Red
+    Write-Host '• Get-DDStatus        ' -NoNewLine
+    Write-Host 'Gets current status of dedup job  ' -NoNewLine -ForegroundColor Yellow
+    Write-Host 'Usage: ' -NoNewLine
+    Write-Host 'Get-DDStatus' -ForegroundColor Green
+    Write-Host '• Get-LocalShares     ' -NoNewLine
+    Write-Host 'list all local shares (no $)      ' -NoNewLine -ForegroundColor Yellow
+    Write-Host 'Usage: ' -NoNewLine
+    Write-Host 'Get-LocalShares' -ForegroundColor Green
+    Write-Host '  Type ' -NoNewLine -ForegroundColor Yellow
+    Write-Host 'Get-DFSReminder' -NoNewLine -ForegroundColor Cyan
+    Write-Host ' to see this reminder again' -ForegroundColor Yellow
+}
+
+Get-DFSReminder
