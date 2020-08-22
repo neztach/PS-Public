@@ -1,0 +1,26 @@
+#get all local groups
+$groups = @(([ADSI]"WinNT://$($env:computername),computer").psbase.children | 
+          Where-Object { $_.psbase.schemaClassName -eq 'group' } | 
+          ForEach-Object { ($_.name)[0]})
+
+$orphanstotal = 0
+#Loop through all local groups for Orphaned users and remove them:
+foreach ($group in $groups) {
+    $OrphanedUsers = @()
+    $OrphanedUsers = ([ADSI]"WinNT://./$($group)").psbase.Invoke('Members') | 
+                     ForEach-Object {([ADSI]$_).InvokeGet('AdsPath')} | 
+                     Where-Object {$_ -like 'WinNT://S-1-5-21-*'}
+    $orphanstotal = $orphanstotal + $($OrphanedUsers.Count)
+    if ($OrphanedUsers -gt 0) {
+        foreach ($OrphanedUser in $OrphanedUsers) {
+            $groupobj = [ADSI]"WinNT://./$group,group"
+            try {
+                $groupObj.Remove($OrphanedUser)
+                Write-Output "[$env:computername]`tOrphaned user account `t$OrphanedUser removed from group `t$group."
+            } catch {
+                Write-output "[$($env:computername)] Removal of $($OrphanedUser) from $($group) failed with message: $($Error[0].exception.message)"
+            }
+        }
+    }
+}
+If ($orphanstotal -eq 0){Write-Output 'No Orphaned Accounts found'}
