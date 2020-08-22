@@ -1,0 +1,74 @@
+Function Get-UserFolderAudit{
+    <#
+      .SYNOPSIS
+      Scan user folders for folders that are present, but don't match a username
+      .DESCRIPTION
+      Scan user folders for folders that are present, but don't match a username
+      .PARAMETER prop
+      The Prop Parameter can be any of the following: LOC1, LOC2, LOC3, LOC4, LOC5, LOC6, LOC7
+      
+      You need to tell the script which property/location folders you want to look at
+      .EXAMPLE
+      Get-UserFolderAudit -prop LOC2
+      Gets a list of all folders in the LOC2 users location, then query
+      AD to see if a user has a username to match
+    #>
+
+    param ([Parameter(Mandatory,HelpMessage='Declare LOC1,LOC2,LOC3,LOC4,LOC5,LOC6, or LOC7')]$prop)
+
+    switch ($prop){
+        'LOC1' {$UserFolders = Get-ChildItem -path '\\path\to\Users\at\LOC1' | Sort-Object -Property Name}
+        'LOC2' {$UserFolders = Get-ChildItem -path '\\path\to\Users\at\LOC2' | Sort-Object -Property Name}
+        'LOC3' {$UserFolders = Get-ChildItem -path '\\path\to\Users\at\LOC3' | Sort-Object -Property Name}
+        'LOC4' {$UserFolders = Get-ChildItem -path '\\path\to\Users\at\LOC4' | Sort-Object -Property Name}
+        'LOC5' {$UserFolders = Get-ChildItem -path '\\path\to\Users\at\LOC5' | Sort-Object -Property Name}
+        'LOC6' {$UserFolders = Get-ChildItem -path '\\path\to\Users\at\LOC6' | Sort-Object -Property Name}
+        'LOC7' {$UserFolders = Get-ChildItem -path '\\path\to\Users\at\LOC7' | Sort-Object -Property Name}
+    }
+    
+    ### Shorten Location listed in AD to a short-form
+    Function Convert-Company {
+        param([Parameter(Mandatory,HelpMessage='Part of the Long Company Name')]$comp)
+        switch -Wildcard ($comp) {
+            '*location 1*' {$loc='LOC1'}
+            '*location 2*' {$loc='LOC2'}
+            '*location 3*' {$loc='LOC3'}
+            '*location 4*' {$loc='LOC4'}
+            '*location 5*' {$loc='LOC5'}
+            '*location 6*' {$loc='LOC6'}
+            '*location 7*' {$loc='LOC7'}
+            default        {$loc=$comp}
+        }
+        Return $loc
+    }
+
+    $Master = New-Object -TypeName System.Collections.ArrayList
+    ForEach ($folder in $UserFolders){
+        Try {
+            If (Get-ADUser -Identity $($folder.Name)){
+                $CurrentUser = Get-ADUser -Identity $($folder.Name) -Properties Enabled,Company,Title | Select-Object -Property Name,Enabled,Company,Title
+                $null = $Master.add((New-Object -TypeName PSObject -Property @{
+                    Folder  = $folder.FullName
+                    Name    = $CurrentUser.Name
+                    Enabled = $CurrentUser.Enabled
+                    Company = Convert-Company -comp $CurrentUser.Company
+                    Title   = $CurrentUser.Title
+                }))
+            }
+        } Catch {
+            Write-Host ('{0}: ' -f $folder.name) -NoNewLine -ForegroundColor Yellow
+            Write-Host 'No matching username' -ForegroundColor Red
+            $null = $Master.add((New-Object -TypeName PSObject -Property @{
+                Folder  = $folder.FullName
+                Name    = 'NA'
+                Enabled = 'NA'
+                Company = 'NA'
+                Title   = 'NA'
+            }))
+        }
+    }
+    $Master = $Master | Select-Object -Property Folder,Name,Enabled,Company,Title
+    Return $Master
+}
+
+#Get-UserFolderAudit -prop LOC1 | Out-GridView
