@@ -4,11 +4,20 @@ function Get-DNSIssues {
       Check for DNS mismatches and errors
       .DESCRIPTION
       This iterates through DNS reverse records looking for mismatches and errors
+      .PARAMETER
+      If you're looking for a specific PC entries, type that in after Get-DNSIssues
       .EXAMPLE
       Get-DNSIssues | Select-Object -Property Subnet,DNSName,FWD,PTR | Format-Table
+
+      Will output all mismatch records and show those without FWD entries in red.
+      .EXAMPLE
+      Get-DNSIssues testmachine
+
+      Will iterate through all DNS records and show only those that match the word testmachine
     #>
-    
-    import-module dnsserver
+    param([string]$PCName)
+
+    import-module -Name dnsserver
     
     ### Get PDC to use as DNS server to query
     $PDC    = ([DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()).DomainControllers | 
@@ -21,6 +30,7 @@ function Get-DNSIssues {
     #$PDC   = 'DNSServer'
     
     $DNSErr = New-Object -TypeName System.Collections.Arraylist
+    $DNSAll = New-Object -TypeName System.Collections.Arraylist  
     $pi     = 0
     
     ### Define Write-Progress Splat Variables
@@ -81,7 +91,14 @@ function Get-DNSIssues {
             Try {
                 $DNSName = (Resolve-DnsName -Name $ServerDNSName -ErrorAction Stop)
             } Catch {
-                Write-Host ("FWD Record not found for $ServerDNSName of PTR Record $ServerIPAddress") -ForegroundColor Red
+                If ($PCName){
+                    If ($ServerDNSName -match $PCName){
+                        Write-Host (('FWD Record not found for {0} of PTR Record {1}' -f $ServerDNSName, $ServerIPAddress)) -ForegroundColor Red
+                        Break
+                    }
+                } else {
+                    Write-Host (('FWD Record not found for {0} of PTR Record {1}' -f $ServerDNSName, $ServerIPAddress)) -ForegroundColor Red
+                }
             }
             
             ### If DNSName resolves
@@ -94,6 +111,12 @@ function Get-DNSIssues {
                     ### If FWD Address patches PTR address - set $Control to 1
                     if ($DNSIPAddress -eq $ServerIPAddress) {
                         $Control = 1
+                        $null = $DNSAll.add((New-Object -TypeName PSObject -Property @{
+                                    PTR     = $ServerIPAddress
+                                    Subnet  = $ServerDNSSubnet
+                                    DNSName = $ServerDNSName
+                                    FWD     = $DNSIPAddress
+                                }))
                     }
                 }
                 ### If Control is not set to 1 that means FWD record doesn't match PTR record.
@@ -105,15 +128,26 @@ function Get-DNSIssues {
                                 Subnet  = $ServerDNSSubnet
                                 DNSName = $ServerDNSName
                                 FWD     = $DNSIPAddress
-                    }))
+                            }))
+                    If ($PCName){
+                        $null = $DNSAll.add((New-Object -TypeName PSObject -Property @{
+                                    PTR     = $ServerIPAddress
+                                    Subnet  = $ServerDNSSubnet
+                                    DNSName = $ServerDNSName
+                                    FWD     = $DNSIPAddress
+                                }))
+                    }
                     # Add-Content -Value $Output -Path "C:\down\PTRError.txt" ### If Sending to ouput file 
                     # Write-Warning $Output                                   ### If Sending to ouput file 
                 }
             }
         }
     }
-    Return $DNSErr
-  }
+    If ($PCName){
+        $PCFound = $DNSAll | Where-Object {$_.DNSName -match $PCName} | Sort-Object -Property DNSName
+        Return $PCFound
+    } else {
+        Return $DNSErr
+    }
+}
 
-Get-DNSIssues | Select-Object -Property Subnet,DNSName,FWD,PTR | Format-Table
-#$error[0]
