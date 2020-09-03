@@ -29,9 +29,9 @@ function Get-DNSIssues {
     ### out the above and uncomment out the below
     #$PDC   = 'DNSServer'
     
-    $DNSErr = New-Object -TypeName System.Collections.Arraylist
-    $DNSAll = New-Object -TypeName System.Collections.Arraylist  
-    $pi     = 0
+    $DNSErr  = New-Object -TypeName System.Collections.Arraylist
+    $PCFound = New-Object -TypeName System.Collections.Arraylist
+    $pi      = 0
     
     ### Define Write-Progress Splat Variables
     $Progress = @{
@@ -92,12 +92,18 @@ function Get-DNSIssues {
                 $DNSName = (Resolve-DnsName -Name $ServerDNSName -ErrorAction Stop)
             } Catch {
                 If ($PCName){
-                    If ($ServerDNSName -match $PCName){
-                        Write-Host (('FWD Record not found for {0} of PTR Record {1}' -f $ServerDNSName, $ServerIPAddress)) -ForegroundColor Red
+                    If ($ServerDNSName.split('.')[0] -match $PCName){
+                        $null = $PCFound.add((New-Object -TypeName PSObject -Property @{
+                                    PTR     = $ServerIPAddress
+                                    Subnet  = $ServerDNSSubnet
+                                    DNSName = $ServerDNSName
+                                    FWD     =''
+                                }))
                         Break
                     }
                 } else {
                     Write-Host (('FWD Record not found for {0} of PTR Record {1}' -f $ServerDNSName, $ServerIPAddress)) -ForegroundColor Red
+                    $DNSName = $null
                 }
             }
             
@@ -108,35 +114,35 @@ function Get-DNSIssues {
                 foreach ($DNSRecord in $DNSName) {
                     ### Get Reverse DNS Name
                     $DNSIPAddress = $DNSRecord.IPAddress
+                    
+                    $sip = $ServerIPAddress
+                    $sdn = $ServerDNSSubnet
+                    $sds = $ServerDNSName
+                    $dip = $DNSIPAddress
+                    
+                    If ($sds.split('.')[0] -match $PCName){
+                        $null = $PCFound.add((New-Object -TypeName PSObject -Property @{
+                            PTR     = $sip
+                            Subnet  = $sdn
+                            DNSName = $sds
+                            FWD     = $dip
+                        }))
+                    }
                     ### If FWD Address patches PTR address - set $Control to 1
                     if ($DNSIPAddress -eq $ServerIPAddress) {
                         $Control = 1
-                        $null = $DNSAll.add((New-Object -TypeName PSObject -Property @{
-                                    PTR     = $ServerIPAddress
-                                    Subnet  = $ServerDNSSubnet
-                                    DNSName = $ServerDNSName
-                                    FWD     = $DNSIPAddress
-                                }))
                     }
                 }
                 ### If Control is not set to 1 that means FWD record doesn't match PTR record.
                 ### These are the DNS entries that are bad.
                 if ($Control -eq '0') {
-                    # $Output = $ServerIPAddress + ";" + $ServerDNSSubnet + ";" + $ServerDNSName + ";" + $DNSIPAddress ### If Sending to ouput file 
+                    #$Output = $ServerIPAddress + ";" + $ServerDNSSubnet + ";" + $ServerDNSName + ";" + $DNSIPAddress ### If Sending to ouput file
                     $null = $DNSErr.add((New-Object -TypeName PSObject -Property @{
-                                PTR     = $ServerIPAddress
-                                Subnet  = $ServerDNSSubnet
-                                DNSName = $ServerDNSName
-                                FWD     = $DNSIPAddress
+                                PTR     = $sip
+                                Subnet  = $sdn
+                                DNSName = $sds
+                                FWD     = $dip
                             }))
-                    If ($PCName){
-                        $null = $DNSAll.add((New-Object -TypeName PSObject -Property @{
-                                    PTR     = $ServerIPAddress
-                                    Subnet  = $ServerDNSSubnet
-                                    DNSName = $ServerDNSName
-                                    FWD     = $DNSIPAddress
-                                }))
-                    }
                     # Add-Content -Value $Output -Path "C:\down\PTRError.txt" ### If Sending to ouput file 
                     # Write-Warning $Output                                   ### If Sending to ouput file 
                 }
@@ -144,10 +150,10 @@ function Get-DNSIssues {
         }
     }
     If ($PCName){
-        $PCFound = $DNSAll | Where-Object {$_.DNSName -match $PCName} | Sort-Object -Property DNSName
+        $PCFound = $PCFound | Select-Object -Property Subnet,DNSName,FWD,PTR
         Return $PCFound
     } else {
+        $DNSErr = $DNSErr | Select-Object -Property Subnet,DNSName,FWD,PTR
         Return $DNSErr
     }
 }
-
