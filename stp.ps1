@@ -4,28 +4,23 @@
         .SYNOPSIS
         Installation script for PowerShell managing solution hosted at https://github.com/ztrhgf/Powershell_CICD_repository
         Contains same steps as described at https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md
-
         .DESCRIPTION
         Installation script for PowerShell managing solution hosted at https://github.com/ztrhgf/Powershell_CICD_repository
         Contains same steps as described at https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md
-
         .PARAMETER noEnvModification
         Switch to omit changes of your environment i.e. just customization of cloned folders content 'repo_content_set_up' will be made.
-
         .PARAMETER iniFile
         Path to text ini file that this script uses as storage for values the user entered during this scripts run.
         So next time, they can be used to speed up whole installation process.
-
         Default is "Powershell_CICD_repository.ini" in root of user profile, so it can't be replaced when user reset cloned repository etc.
-
         .NOTES
         Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
 
 [CmdletBinding()]
-param (
-    [switch] $noEnvModification,
-    [string] $iniFile = (Join-Path -Path $env:USERPROFILE -ChildPath 'Powershell_CICD_repository.ini')
+Param (
+    [switch]$noEnvModification,
+    [string]$iniFile = (Join-Path -Path $env:USERPROFILE -ChildPath 'Powershell_CICD_repository.ini')
 )
 
 Begin {
@@ -33,19 +28,19 @@ Begin {
     $isserver = $notadmin = $notadadmin = $noadmodule = $nogpomodule = $skipad = $skipgpo = $mgmserver = $accessdenied = $repositoryhostsession = $mgmserversession = 0
     $Host.UI.RawUI.Windowtitle = 'Installer of PowerShell CI/CD solution'
 
-    $transcript = Join-Path -Path $env:USERPROFILE -ChildPath ((Split-Path -Path $PSCommandPath -Leaf) + '.log')
+    $transcript             = Join-Path -Path $env:USERPROFILE -ChildPath ((Split-Path -Path $PSCommandPath -Leaf) + '.log')
     Start-Transcript -Path $transcript -Force
 
-    $ErrorActionPreference = 'Stop'
+    $ErrorActionPreference  = 'Stop'
 
     # char that is between name of variable and its value in ini file
-    $divider = '='
+    $divider                = '='
 
     # list of variables needed for installation, will be saved to iniFile 
-    $setupVariable = @{}
+    $setupVariable          = @{}
 
     # name of GPO that will be used for connecting computers to this solution
-    $GPOname = 'PS_env_set_up'
+    $GPOname                = 'PS_env_set_up'
 
     # hardcoded PATHs for TEST installation
     $repositoryShare        = "\\$env:COMPUTERNAME\repositoryShare"
@@ -55,9 +50,7 @@ Begin {
     #endregion Variables
 
     ### Detect if Server
-    if ((Get-WmiObject -Class Win32_OperatingSystem).ProductType -in (2, 3)) {
-        $isServer++
-    }
+    If ((Get-WmiObject -Class Win32_OperatingSystem).ProductType -in (2, 3)) {$isServer++}
 
     #region helper functions
     Function Step-pressKeyToContinue {
@@ -75,11 +68,7 @@ Begin {
         $choice = ''
         While ($choice -notmatch '^[Y|N]$') {$choice = Read-Host -Prompt $t}
         If ($choice -eq 'N') {
-            If ($passthru) {
-                Return $choice
-            } else {
-                break
-            }
+            If ($passthru) {Return $choice} else {break}
         }
         if ($passthru) {Return $choice}
     }
@@ -94,16 +83,12 @@ Begin {
 
         $choice = ''
         While ($choice -notmatch '^[Y|N]$') {$choice = Read-Host -Prompt $t}
-        If ($choice -eq 'N') {
-            Return $false
-        } else {
-            Return $true
-        }
+        If ($choice -eq 'N') {Return $false} else {Return $true}
     }
 
     Function Step-getComputerMembership {
         # Pull the gpresult for the current server
-        $Lines = & "$env:windir\system32\gpresult.exe" /s $env:COMPUTERNAME /v /SCOPE COMPUTER
+        $Lines   = & "$env:windir\system32\gpresult.exe" /s $env:COMPUTERNAME /v /SCOPE COMPUTER
 
         # Initialize arrays
         $cgroups = @()
@@ -127,8 +112,8 @@ Begin {
     Function Step-startProcess {
         [CmdletBinding()]
         param (
-            [string]$filePath = '',
-            [string]$argumentList = '',
+            [string]$filePath         = '',
+            [string]$argumentList     = '',
             [string]$workingDirectory = (Get-Location),
             [switch]$dontWait,
             # lot of git commands output verbose output to error stream
@@ -162,7 +147,9 @@ Begin {
             If ($optional) {
                 $value = Read-Host -Prompt "    - (OPTIONAL) Enter $readHost"
             } Else {
-                While (!$value) {$value = Read-Host -Prompt "    - Enter $readHost"}
+                While (!$value) {
+                    $value = Read-Host -Prompt "    - Enter $readHost"
+                }
             }
         } Else {
             '' # Write-Host "   - variable '$variable' will be: $value" -ForegroundColor Gray
@@ -319,6 +306,24 @@ Begin {
         }
     }
 
+    Function Step-ChooseFile {
+        Param ([string]$Title)
+        Add-Type -AssemblyName system.Windows.Forms
+        $FileBrowser = New-Object System.Windows.Forms.OpenFileDialog
+        $FileBrowser.InitialDirectory = [Environment]::GetFolderPath('Desktop') 
+        $FileBrowser.Filter           = 'Application (*.exe)|*.exe'
+        $FileBrowser.Title            = $Title
+        $FileChoice = $FileBrowser.ShowDialog()
+ 
+        If ($FileChoice -eq [System.Windows.Forms.DialogResult]::OK) {
+            $EXEPath = $FileBrowser.FileName
+        } else {
+            $EXEPath = 'NA'
+        }
+ 
+        Return $EXEPath#.FileName #$BackupLocation
+    }
+
     Function Step-installGIT {
         $iPath1 = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
         $iPath2 = 'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
@@ -327,7 +332,8 @@ Begin {
 
         If (!$installedGITVersion -or $installedGITVersion -as [version] -lt '2.27.0') {
             # Get latest download url for git-for-windows 64-bit exe
-            $url = 'https://api.github.com/repos/git-for-windows/git/releases/latest'
+            $url          = 'https://api.github.com/repos/git-for-windows/git/releases/latest'
+            $install_args = '/SP- /VERYSILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS'
             If ($asset = Invoke-RestMethod -Method Get -Uri $url | ForEach-Object {$_.assets} | Where-Object {$_.name -like '*64-bit.exe'}) {
                 ### Download Git Installer File
                 Write-Host '      - downloading'
@@ -338,15 +344,23 @@ Begin {
             
                 ### Install Git
                 Write-Host '      - installing'
-                $install_args = '/SP- /VERYSILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS'
                 Start-Process -FilePath $installer -ArgumentList $install_args -Wait
                 Start-Sleep -Seconds 3
 
                 # update PATH
                 $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
             } Else {
-                Write-Warning -Message "Skipped!`nURL $url isn't accessible, install GIT manually"
-                Step-continue
+                $Choice = Read-Host -Prompt 'Unable to fetch.  If you previously downloaded, would you like to browse to the installer? [Y/N]'
+                If ($Choice -match '[Yy]'){
+                    $installer = Step-ChooseFile -Title 'Git-Installer'
+                    Start-Process -FilePath $installer -ArgumentList $install_args -Wait
+                    Start-Sleep -Seconds 3
+                    # update PATH
+                    $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path', 'User')
+                } Else {
+                    Write-Warning -Message "Skipped!`nURL $url isn't accessible, install GIT manually"
+                    Step-continue
+                }
             }
         } Else {
             Write-Host '      - already installed'
@@ -391,7 +405,7 @@ Begin {
         }
 
         ### Downloading Microsoft VS Code
-        $vscInstaller = "$env:TEMP\vscode-stable.exe"
+        $vscInstaller       = "$env:TEMP\vscode-stable.exe"
         Remove-Item -Force -Path $vscInstaller -ErrorAction SilentlyContinue
         Write-Host '      - downloading'
         $ProgressPreference = 'SilentlyContinue'
@@ -417,37 +431,35 @@ Begin {
         [CmdletBinding()]
         Param ($xmlDefinition, $taskName)
         $result = & "$env:windir\system32\schtasks.exe" /CREATE /XML "$xmlDefinition" /TN "$taskName" /F
-        If (!$?) {
-            Throw "Unable to create scheduled task $taskName"
-        }
+        If (!$?) {Throw "Unable to create scheduled task $taskName"}
     }
 
     Function Step-startSchedTask {
         [CmdletBinding()]
         Param ($taskName)
         $result = & "$env:windir\system32\schtasks.exe" /RUN /I /TN "$taskName"
-        If (!$?) {
-            Throw "Task $taskName finished with error. Check '$env:SystemRoot\temp\repo_sync.ps1.log'"
-        }
+        If (!$?) {Throw "Task $taskName finished with error. Check '$env:SystemRoot\temp\repo_sync.ps1.log'"}
     }
 
     Function Step-exportCred {
         [CmdletBinding()]
         Param (
             [Parameter(Mandatory = $true,HelpMessage='Provide Credentials')][System.Management.Automation.Credential()][System.Management.Automation.PSCredential]$credential,
-            [string] $xmlPath = "$env:SystemDrive\temp\login.xml",
+            [string]$xmlPath = "$env:SystemDrive\temp\login.xml",
             [Parameter(Mandatory = $true,HelpMessage='Credentials to Run As')][string]$runAs
         )
 
         Begin {
             # transform relative path to absolute
             Try {
-                $null = Split-Path -Path $xmlPath -Qualifier -ErrorAction Stop
+                $null    = Split-Path -Path $xmlPath -Qualifier -ErrorAction Stop
             } Catch {
                 $xmlPath = Join-Path -Path (Get-Location) -ChildPath $xmlPath
             }
+
             # remove existing xml
             Remove-Item -Path $xmlPath -ErrorAction SilentlyContinue -Force
+
             # create destination folder
             [Void][System.IO.Directory]::CreateDirectory((Split-Path -Path $xmlPath -Parent))
         }
@@ -456,29 +468,30 @@ Begin {
             $pswd  = $credential.GetNetworkCredential().password
 
             $command = @"
-            # just in case auto-load of modules would be broken
-            import-module `$env:windir\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security -ea Stop
-            `$pswd = ConvertTo-SecureString `'$pswd`' -AsPlainText -Force
-            `$credential = New-Object System.Management.Automation.PSCredential $login, `$pswd
-            Export-Clixml -inputObject `$credential -Path $xmlPath -Encoding UTF8 -Force -ea Stop
+# just in case auto-load of modules would be broken
+Import-Module `$env:windir\System32\WindowsPowerShell\v1.0\Modules\Microsoft.PowerShell.Security -ErrorAction Stop
+`$pswd       = ConvertTo-SecureString `'$pswd`' -AsPlainText -Force
+`$credential = New-Object System.Management.Automation.PSCredential $login, `$pswd
+Export-Clixml -inputObject `$credential -Path $xmlPath -Encoding UTF8 -Force -ErrorAction Stop
 "@
 
             # encode as base64
             $bytes         = [System.Text.Encoding]::Unicode.GetBytes($command)
             $encodedString = [Convert]::ToBase64String($bytes)
+
             #TODO idealne pomoci schtasks aby bylo univerzalnejsi
-            $A = New-ScheduledTaskAction -Argument "-executionpolicy bypass -noprofile -encodedcommand $encodedString" -Execute "$PSHome\powershell.exe"
+            $A        = New-ScheduledTaskAction -Argument "-ExecutionPolicy Bypass -NoProfile -EncodedCommand $encodedString" -Execute "$PSHome\powershell.exe"
             If ($runAs -match '\$') {
                 # under gMSA account
                 $P = New-ScheduledTaskPrincipal -UserId $runAs -LogonType Password
             } Else {
-                # under system account
+                # under SYSTEM account
                 $P = New-ScheduledTaskPrincipal -UserId $runAs -LogonType ServiceAccount
             }
-            $S = New-ScheduledTaskSettingsSet
+            $S        = New-ScheduledTaskSettingsSet
             $taskName = 'cred_export'
             Try {
-                $null = New-ScheduledTask -Action $A -Principal $P -Settings $S -ea Stop | Register-ScheduledTask -Force -TaskName $taskName -ea Stop
+                $null = New-ScheduledTask -Action $A -Principal $P -Settings $S -ErrorAction Stop | Register-ScheduledTask -Force -TaskName $taskName -ErrorAction Stop
             } Catch {
                 If ($_ -match 'No mapping between account names and security IDs was done') {
                     Throw "Account $runAs doesn't exist or cannot be used on $env:COMPUTERNAME"
@@ -537,54 +550,117 @@ Begin {
 }
 Process {
     #region initial
+    Function Step-OnScreenMSG {
+        Param ([int]$z)
+        Switch ($z) {
+            1 {
+                Write-Host "####################################`n#   INSTALL OPTIONS`n####################################" -ForegroundColor Magenta
+                Write-Host '1)' -NoNewline -ForegroundColor Yellow;Write-Host ' TEST installation' -ForegroundColor Cyan
+                Write-Host '    - PURPOSE : ' -NoNewLine -ForegroundColor Yellow;Write-Host 'Fast and safe test of the features, this solution offers.'
+                Write-Host '        - Run this installer on a test computer (preferably VM [Windows Sandbox, Virtualbox, Hyper-V, etc.])'
+                Write-Host "        - No prerequisities needed like '" -NoNewLine;Write-Host 'Active Directory' -NoNewLine -ForegroundColor Cyan;Write-Host "' or a '" -NoNewLine;Write-Host 'Cloud Repository' -NoNewLine -ForegroundColor Cyan;Write-Host "'."
+                Write-Host '    - GOAL    : ' -NoNewLine -ForegroundColor Yellow;Write-Host 'To have this as simple as possible - Installer automatically:'
+                Write-Host '        - Installs VSC, GIT.'
+                Write-Host '        - Creates GIT repository in ' -NoNewLine;Write-Host $remoteRepository -NoNewLine -ForegroundColor Cyan;Write-Host '. (and clone it to ' -NoNewLine;Write-Host $userRepository -NoNewLine -ForegroundColor Cyan;Write-Host '.)'
+                Write-Host '        - Creates folder ' -NoNewLine;Write-Host $repositoryShareLocPath -NoNewLine -ForegroundColor Cyan;Write-Host ' and shares it as ' -NoNewLine;Write-Host $repositoryShare -NoNewLine -ForegroundColor Cyan;Write-Host '.'
+                Write-Host '        - Creates security group repo_reader, repo_writer.'
+                Write-Host '        - Creates required scheduled tasks.'
+                Write-Host '        - Creates and sets global PowerShell profile.'
+                Write-Host "        - Starts VSC editor with your new repository, so you can start your testing immediately. :)`n"
+                Write-Host '2)' -NoNewline -ForegroundColor Yellow;Write-Host ' Standard installation (Active Directory needed)' -ForegroundColor Cyan
+                Write-Host '    - This script will set up your own GIT repository and your environment by:'
+                Write-Host '        - Creating repo_reader, repo_writer AD groups.'
+                Write-Host '        - Creates shared folder for serving repository data to clients.'
+                Write-Host '        - Customizes generic data from repo_content_set_up folder to match your environment.'
+                Write-Host '        - Copies customized data to your repository.'
+                Write-Host '        - Sets up your repository: (Activate custom git hooks / Set git user name and email).'
+                Write-Host '        - Commit & Push new content of your repository.'
+                Write-Host '        - Sets up MGM server: (Copies the Repo_sync folder / Creates Repo_sync scheduled task / Exports repo_puller credentials).'
+                Write-Host '        - Copies exported credentials from MGM to local repository, Commmit and Push it.'
+                Write-Host "        - Creates a GPO '" -NoNewLine;Write-Host $GPOname -NoNewLine -ForegroundColor Cyan;Write-Host "' that will be used for connecting clients to this solution:"
+                Write-Host '            - NOTE: Linking GPO has to be done manually.' -ForegroundColor Yellow
+                Write-Host '    - NOTE: Every step has to be explicitly confirmed.' -ForegroundColor Red
+                Write-Host '3)' -NoNewline -ForegroundColor Yellow;Write-Host ' Update of existing installation' -ForegroundColor Cyan
+                Write-Host '    - NO MODIFICATION OF YOUR ENVIRONMENT WILL BE MADE.' -ForegroundColor Yellow
+                Write-Host '        - Just customization of generic data in repo_content_set_up folder to match your environment.'
+                Write-Host '            - Merging with your own repository etc has to be done manually.'
+            }
+            2 {
+                Write-Host "####################################`n#   BEFORE YOU CONTINUE`n####################################" -ForegroundColor Magenta
+                Write-Host '- Create cloud or locally hosted GIT !private! repository (tested with Azure DevOps but probably will work also with GitHub etc).'
+                Write-Host '   - Create READ only account in that repository (repo_puller).'
+                Write-Host '       - Create credentials for this account, that can be used in unnatended way (i.e. alternate credentials in Azure DevOps).'
+                Write-Host "   - Install the newest version of 'Git' and 'Git Credential Manager for Windows' and clone your repository locally."
+                Write-Host "        - Using 'git clone' command under account, that has write permission to the repository i.e. yours."
+                Write-Host '   - NOTE:' -ForegroundColor Yellow
+                Write-Host "        - It is highly recommended to use 'Visual Studio Code (VSC)' editor to work with the repository content because it provides:"
+                Write-Host '            - Uunified admin experience through repository VSC workspace settings.'
+                Write-Host '            - Integration & control of GIT.'
+                Write-Host '            - Auto-Formatting of the code, etc..'
+                Write-Host '        - More details can be found at https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md'
+            }
+            3 {
+                Write-Host "############################`n!!! ANYONE WHO CONTROL THIS SOLUTION IS THE DE FACTO ADMINISTRATOR ON EVERY COMPUTER CONNECTED TO IT !!!`n" -ForegroundColor Red
+                Write-Host 'So:'
+                Write-Host '    - Only *Approved Users* should have write access to GIT repository.' -ForegroundColor Yellow
+                Write-Host '    - For accessing cloud GIT repository, use MFA if possible' -ForegroundColor Yellow
+                Write-Host '    - MGM server (processes repository data and uploads them to share) has to be protected same as the server that hosts that repository share.' -ForegroundColor Yellow
+                Write-Host '############################' -ForegroundColor Red
+            }
+            4 {
+                Write-Host '############################' -ForegroundColor Yellow
+                Write-Host "Your input will be stored to '" -NoNewLine -ForegroundColor Yellow;Write-Host $iniFile -NoNewLine;Write-Host "'. So next time you start this script, its content will be automatically used." -ForegroundColor Yellow
+                Write-Host '############################' -ForegroundColor Yellow
+            }
+            5 {
+                Write-Host "   - copy Repo_sync folder to " -NoNewLine;Write-Host $MGMRepoSync -NoNewLine -ForegroundColor Magenta;Write-Host "'"
+                Write-Host "   - install newest version of 'GIT'"
+                Write-Host "   - create scheduled task '" -NoNewLine;Write-Host 'Repo_sync' -NoNewLine -ForegroundColor Magenta;Write-Host "' from '" -NoNewLine;Write-Host 'Repo_sync.xml' -NoNewLine -ForegroundColor Magenta;Write-Host "'"
+                Write-Host "   - export '" -NoNewLine;Write-Host 'repo_puller' -NoNewLine -ForegroundColor Magenta;Write-Host "' account alternate credentials to '" -NoNewLine;Write-Host "$MGMRepoSync\login.xml" -NoNewLine -ForegroundColor Magenta;Write-Host "' (only SYSTEM account on " -NoNewLine;Write-Host $MGMServer -NoNewLine -ForegroundColor Magenta;Write-Host " will be able to read them!)"
+                Write-Host "   - copy exported credentials from " -NoNewLine;Write-Host $MGMServer -NoNewLine -ForegroundColor Magenta;Write-Host " to " -NoNewLine;Write-Host $userRepoSync -ForegroundColor Magenta
+                Write-Host "   - commit&push exported credentials (so they won't be automatically deleted from " -NoNewLine;Write-Host $MGMServer -NoNewLine -ForegroundColor Magenta;Write-Host ', after this solution starts working)'
+            }
+            6 {
+                Write-Host '    - For ASAP test that synchronization is working:'
+                Write-Host "        - Run on client command '" -NoNewLine;Write-Host 'gpupdate /force' -NoNewLine -ForegroundColor Cyan;Write-Host "' to create scheduled task " -NoNewLine;Write-Host $GPOname -NoNewLine -ForegroundColor Magenta;Write-Host '.'
+                Write-Host '        - Run that sched. task and check the result in ' -NoNewLine;Write-Host "C:\Windows\Temp\$GPOname.ps1.log" -NoNewLine -ForegroundColor Cyan;Write-Host '.'
+            }
+            7 {
+                Write-Host "SUMMARY INFORMATION ABOUT THIS !TEST! INSTALLATION:"
+                Write-Host " - Central Repository share is at " -NoNewLine;Write-Host $repositoryShareLocPath -NoNewLine -ForegroundColor Magenta;Write-Host " (locally at " -NoNewLine;Write-Host $repositoryShareLocPath -NoNewLine -ForegroundColor Magenta;Write-Host ').'
+                Write-Host "    - It is used by clients to synchronize their repository data."
+                Write-Host " - (Cloud) Repository is hosted locally at " -NoNewLine;Write-Host $remoteRepository -ForegroundColor Magenta
+                Write-Host "    - Simulates for example GitHub private repository."
+                Write-Host " - (Cloud) Repository is locally cloned to " -NoNewLine;Write-Host $userRepository -ForegroundColor Magenta
+                Write-Host "    - Here you make changes (creates new functions, modules, ...) and commit them to (Cloud) Repository."
+                Write-Host " - Scheduled Tasks:"
+                Write-Host "    - Repo_sync - Pulls data from (Cloud) GIT repository, Process them, and Synchronize result to " -NoNewLine;Write-Host $repositoryShare -ForegroundColor Magenta
+                Write-Host "        - Processing is done in C:\Windows\Scripts\Repo_sync"
+                Write-Host "        - Log file in C:\Windows\Temp\Repo_sync.ps1.log"
+                Write-Host "    - PS_env_set_up - Synchronizes local content from " -NoNewLine;Write-Host $repositoryShare -NoNewLine -ForegroundColor Magenta;Write-Host " (i.e. it is used to get repository data to clients)."
+                Write-Host "        - Log file in C:\Windows\Temp\PS_env_set_up.ps1.log"
+            }
+            8 {
+                Write-Host '- Do NOT place your GIT repository inside Dropbox, Onedrive or other similar synchronization tool, it would cause problems!'
+                Write-Host "- To understand, what is purpose of this repository content check https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/3.%20SIMPLIFIED%20EXPLANATION%20OF%20HOW%20IT%20WORKS.md"
+                Write-Host "- For immediate refresh of clients data (and console itself) use function Refresh-Console"
+                Write-Host "    - NOTE: Available only on computers defined in Variables module in variable `$computerWithProfile"
+                Write-Host "- For examples check https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md"
+                Write-Host "- For brief video introduction check https://youtu.be/-xSJXbmOgyk and other videos at https://youtube.com/playlist?list=PLcNLAABGhY_GqrWfOZGjpgFv3fiaL0ciM"
+                Write-Host "- For master Modules deployment check \modules\modulesConfig.ps1"
+                Write-Host "- For master Custom section features check \custom\customConfig.ps1"
+                Write-Host "- To see what is happening in the background check logs"
+                Write-Host "    - In VSC Output terminal (CTRL + SHIFT + U, there switch output to GIT) (pre-commit.ps1 checks)"
+                Write-Host "    - C:\Windows\Temp\Repo_sync.ps1.log on MGM server (synchronization from GIT repository to share)"
+                Write-Host "    - C:\Windows\Temp\PS_env_set_up.ps1.log on client (synchronization from share to client)"
+                Write-Host "ENJOY :)"
+            }
+        }
+    }
+
     If (!$noEnvModification) {
         Clear-Host
-        @"
-####################################
-#   INSTALL OPTIONS
-####################################
-
-1) TEST installation
-    - PURPOSE: Fast and safe test of the features, this solution offers.
-        - Run this installer on a test computer (preferably VM [Windows Sandbox, Virtualbox, Hyper-V, etc.])
-        - No prerequisities needed like:
-            - Active Directory
-            - Cloud Repository
-    - GOAL: To have this as simple as possible - Installer automatically:
-        - Installs VSC, GIT.
-        - Creates GIT repository in $remoteRepository.
-            - and clone it to $userRepository.
-        - Creates folder $repositoryShareLocPath and shares it as $repositoryShare.
-        - Creates security group repo_reader, repo_writer.
-        - Creates required scheduled tasks.
-        - Creates and sets global PowerShell profile.
-        - Starts VSC editor with your new repository, so you can start your testing immediately. :)
-        
-2) Standard installation (Active Directory needed)
-    - This script will set up your own GIT repository and your environment by:
-        - Creating repo_reader, repo_writer AD groups.
-        - Creates shared folder for serving repository data to clients.
-        - Customizes generic data from repo_content_set_up folder to match your environment.
-        - Copies customized data to your repository.
-        - Sets up your repository:
-            - Activate custom git hooks.
-            - Set git user name and email.
-        - Commit & Push new content of your repository.
-        - Sets up MGM server:
-            - Copies the Repo_sync folder.
-            - Creates Repo_sync scheduled task.
-            - Exports repo_puller credentials.
-        - Copies exported credentials from MGM to local repository, Commmit and Push it.
-        - Creates a GPO '$GPOname' that will be used for connecting clients to this solution:
-            - NOTE: Linking GPO has to be done manually.
-    - NOTE: Every step has to be explicitly confirmed.
-
-3) Update of existing installation
-    - NO MODIFICATION OF YOUR ENVIRONMENT WILL BE MADE.
-        - Just customization of generic data in repo_content_set_up folder to match your environment.
-            - Merging with your own repository etc has to be done manually.
-"@
-
+        Step-OnScreenMSG 1
         $choice = ''
         While ($choice -notmatch '^[1|2|3]$') {$choice = Read-Host -Prompt 'Choose install option (1|2|3)'}
         If ($choice -eq 1) {
@@ -606,27 +682,8 @@ Process {
     }
 
     Clear-Host
-
     If (!$noEnvModification -and !$testInstallation) {
-        @"
-####################################
-#   BEFORE YOU CONTINUE
-####################################
-
-- Create cloud or locally hosted GIT !private! repository (tested with Azure DevOps but probably will work also with GitHub etc).
-   - Create READ only account in that repository (repo_puller).
-       - Create credentials for this account, that can be used in unnatended way (i.e. alternate credentials in Azure DevOps).
-   - Install the newest version of 'Git' and 'Git Credential Manager for Windows' and clone your repository locally.
-        - Using 'git clone' command under account, that has write permission to the repository i.e. yours.
-
-   - NOTE:
-        - It is highly recommended to use 'Visual Studio Code (VSC)' editor to work with the repository content because it provides:
-            - Uunified admin experience through repository VSC workspace settings.
-            - Integration & control of GIT.
-            - Auto-Formatting of the code, etc..
-        - More details can be found at https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md
-"@
-
+        Step-OnScreenMSG 2
         Step-pressKeyToContinue
     } ElseIf ($testInstallation) {
         Write-Host "   - installing 'GIT'"
@@ -637,10 +694,12 @@ Process {
 
         Install-PackageProvider -Name nuget -Force -ForceBootstrap -Scope allusers | Out-Null
     
-        # If (!(Get-Module -ListAvailable PSScriptAnalyzer)) {
-        #     "   - installing 'PSScriptAnalyzer' PS module"
-        #     Install-Module PSScriptAnalyzer -SkipPublisherCheck -Force
-        # }
+        <#
+            If (!(Get-Module -ListAvailable PSScriptAnalyzer)) {
+                "   - installing 'PSScriptAnalyzer' PS module"
+                Install-Module PSScriptAnalyzer -SkipPublisherCheck -Force
+            }
+        #>
 
         Write-Host "   - updating 'PackageManagement' PS module"
         # solves issue https://github.com/PowerShell/vscode-powershell/issues/2824
@@ -656,26 +715,10 @@ Process {
 
     If (!$testInstallation) {Clear-Host} Else {''}
     If (!$noEnvModification -and !$testInstallation) {
-        @'
-############################
-!!! ANYONE WHO CONTROL THIS SOLUTION IS THE DE FACTO ADMINISTRATOR ON EVERY COMPUTER CONNECTED TO IT !!!
-So:
-    - Only *Approved Users* should have write access to GIT repository.
-    - For accessing cloud GIT repository, use MFA if possible
-    - MGM server (processes repository data and uploads them to share) has to be protected same as the server that hosts that repository share.
-############################
-'@
-
+        Step-OnScreenMSG 3
         Step-pressKeyToContinue
         Clear-Host
-
-        @"
-############################
-
-Your input will be stored to '$iniFile'. So next time you start this script, its content will be automatically used.
-
-############################
-"@
+        Step-OnScreenMSG 4
     }
 
     If (!$testInstallation) {
@@ -712,11 +755,11 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         Write-host '- Checking permissions etc' -ForegroundColor Green
 
         <# computer isn't in domain
-                If (!$noEnvModification -and !(Get-WmiObject -Class win32_computersystem).partOfDomain) {
+            If (!$noEnvModification -and !(Get-WmiObject -Class win32_computersystem).partOfDomain) {
                 Write-Warning 'This PC isn't joined to domain. AD related steps will have to be done manually.'
                 ++$skipAD
                 Step-continue
-                }
+            }
         #>
 
         # is local administrator
@@ -891,9 +934,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         } Else {
             Write-Host "   - For testing purposes $repositoryShare will be used"
         }
-        If ($repositoryShare -notmatch '^\\\\[^\\]+\\[^\\]+') {
-            Throw "$repositoryShare isn't valid UNC path"
-        }
+        If ($repositoryShare -notmatch '^\\\\[^\\]+\\[^\\]+') {Throw "$repositoryShare isn't valid UNC path"}
 
         $permissions = "`n`t`t- SHARE`n`t`t`t- Everyone - FULL CONTROL`n`t`t- NTFS`n`t`t`t- SYSTEM, repo_writer - FULL CONTROL`n`t`t`t- repo_reader - READ"
 
@@ -914,9 +955,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
                 $isDFS = ''
                 If (!$testInstallation) {
                     # for testing installation I will use common UNC share
-                    While ($isDFS -notmatch '^[Y|N]$') {
-                        $isDFS = Read-Host -Prompt "`n   - Is '$repositoryShare' DFS share? (Y|N)"
-                    }
+                    While ($isDFS -notmatch '^[Y|N]$') {$isDFS = Read-Host -Prompt "`n   - Is '$repositoryShare' DFS share? (Y|N)"}
                 }
                 If ($isDFS -eq 'Y') {
                     #TODO pridat podporu pro tvorbu DFS share
@@ -924,9 +963,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
                 } Else {
                     # creation of non-DFS shared folder
                     $repositoryHost = ($repositoryShare -split '\\')[2]
-                    If (!$testInstallation -and !$noADmodule -and !(Get-ADComputer -Filter "name -eq '$repositoryHost'")) {
-                        Throw "$repositoryHost doesn't exist in AD"
-                    }
+                    If (!$testInstallation -and !$noADmodule -and !(Get-ADComputer -Filter "name -eq '$repositoryHost'")) {Throw "$repositoryHost doesn't exist in AD"}
                     $parentPath = '\\' + [string]::join('\', $repositoryShare.Split('\')[2..3])
                     If (($parentPath -eq $repositoryShare) -or ($parentPath -ne $repositoryShare -and !(Test-Path -Path $parentPath -ErrorAction SilentlyContinue))) {
                         # shared folder doesn't exist, can't deduce local path from it, so get it from the user
@@ -1026,12 +1063,8 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         $repo_content_set_up = Join-Path -Path $PSScriptRoot -ChildPath 'repo_content_set_up'
         $_other              = Join-Path -Path $PSScriptRoot -ChildPath '_other'
         Write-Host "- Customizing generic data to match your environment by replacing '__REPLACEME__<number>' in content of '$repo_content_set_up' and '$_other'" -ForegroundColor Green
-        If (!(Test-Path -Path $repo_content_set_up -ErrorAction SilentlyContinue)) {
-            Throw "Unable to find '$repo_content_set_up'. Clone repository https://github.com/ztrhgf/Powershell_CICD_repository again"
-        }
-        If (!(Test-Path -Path $_other -ErrorAction SilentlyContinue)) {
-            Throw "Unable to find '$_other'. Clone repository https://github.com/ztrhgf/Powershell_CICD_repository again"
-        }
+        If (!(Test-Path -Path $repo_content_set_up -ErrorAction SilentlyContinue)) {Throw "Unable to find '$repo_content_set_up'. Clone repository https://github.com/ztrhgf/Powershell_CICD_repository again"}
+        If (!(Test-Path -Path $_other -ErrorAction SilentlyContinue)) {Throw "Unable to find '$_other'. Clone repository https://github.com/ztrhgf/Powershell_CICD_repository again"}
         If (!$testInstallation) {
             Write-Host "`n   - Gathering values for replacing __REPLACEME__<number> string:" -ForegroundColor DarkGreen
             Write-Host "       - in case, you will need to update some of these values in future, clone again this repository, edit content of $iniFile and run this wizard again`n"
@@ -1134,14 +1167,10 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         }
 
         If ($testInstallation -or (!$noEnvModification -and !(Step-skip))) {
-            If (!(Test-Path -Path (Join-Path -Path $userRepository -ChildPath '.git') -ErrorAction SilentlyContinue)) {
-                Throw "$userRepository isn't cloned GIT repository (.git folder is missing)"
-            }
+            If (!(Test-Path -Path (Join-Path -Path $userRepository -ChildPath '.git') -ErrorAction SilentlyContinue)) {Throw "$userRepository isn't cloned GIT repository (.git folder is missing)"}
             Write-Host "- Copying customized repository data ($repo_content_set_up) to your own company repository ($userRepository)" -ForegroundColor Green
             $result = Step-copyFolder -source $repo_content_set_up -destination $userRepository
-            If ($err = $result.errMsg) {
-                Throw "Copy failed:`n$err"
-            }
+            If ($err = $result.errMsg) {Throw "Copy failed:`n$err"}
         } Else {
             Write-Warning -Message "Skipped!`n`n - Copy CONTENT of $repo_content_set_up to ROOT of your locally cloned company repository. Review the changes to prevent loss of any of your customization (preferably merge content of customConfig.ps1 and Variables.psm1 instead of replacing them completely) and COMMIT them"
         }
@@ -1218,15 +1247,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         $userRepoSync = Join-Path -Path $userRepository -ChildPath 'custom\Repo_sync'
         Write-Host "- Setting MGM server ($MGMServer)" -ForegroundColor Green
         if (!$testInstallation) {
-            @"
-   - copy Repo_sync folder to '$MGMRepoSync'
-   - install newest version of 'GIT'
-   - create scheduled task 'Repo_sync' from 'Repo_sync.xml'
-   - export 'repo_puller' account alternate credentials to '$MGMRepoSync\login.xml' (only SYSTEM account on $MGMServer will be able to read them!)
-   - copy exported credentials from $MGMServer to $userRepoSync
-   - commit&push exported credentials (so they won't be automatically deleted from $MGMServer, after this solution starts working)
-
-"@
+            Step-OnScreenMSG 5
         }
 
         If ($testInstallation -or (!$noEnvModification -and !(Step-skip))) {
@@ -1454,11 +1475,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         }
         If (!$testInstallation) {
             Write-Warning -Message "- Link GPO $GPOname to OU(s) with computers, that should be driven by this tool.`n    - don't forget, that also $MGMServer server has to be in such OU!"
-            @"
-    - For ASAP test that synchronization is working:
-        - Run on client command 'gpupdate /force' to create scheduled task $GPOname.
-        - Run that sched. task and check the result in C:\Windows\Temp\$GPOname.ps1.log.
-"@
+            Step-OnScreenMSG 6
         } Else {
             Write-Host '- check this console output, to get better idea what was done'
         }
@@ -1470,43 +1487,13 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         }
 
         If ($testInstallation) {
-            @"
-SUMMARY INFORMATION ABOUT THIS !TEST! INSTALLATION:
- - Central Repository share is at $repositoryShareLocPath (locally at $repositoryShareLocPath).
-    - It is used by clients to synchronize their repository data.
- - (Cloud) Repository is hosted locally at $remoteRepository
-    - Simulates for example GitHub private repository.
- - (Cloud) Repository is locally cloned to $userRepository
-    - Here you make changes (creates new functions, modules, ...) and commit them to (Cloud) Repository.
- - Scheduled Tasks:
-    - Repo_sync - Pulls data from (Cloud) GIT repository, Process them, and Synchronize result to $repositoryShare.
-        - Processing is done in C:\Windows\Scripts\Repo_sync
-        - Log file in C:\Windows\Temp\Repo_sync.ps1.log
-    - PS_env_set_up - Synchronizes local content from $repositoryShare (i.e. it is used to get repository data to clients).
-        - Log file in C:\Windows\Temp\PS_env_set_up.ps1.log
-"@
+            Step-OnScreenMSG 7
             Step-pressKeyToContinue
             Clear-Host
         }
 
         Write-Host 'GOOD TO KNOW' -ForegroundColor Green
-        @"
-- Do NOT place your GIT repository inside Dropbox, Onedrive or other similar synchronization tool, it would cause problems!
-- To understand, what is purpose of this repository content check https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/3.%20SIMPLIFIED%20EXPLANATION%20OF%20HOW%20IT%20WORKS.md
-- For immediate refresh of clients data (and console itself) use function Refresh-Console
-    - NOTE: Available only on computers defined in Variables module in variable `$computerWithProfile
-- For examples check https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md
-- For brief video introduction check https://youtu.be/-xSJXbmOgyk and other videos at https://youtube.com/playlist?list=PLcNLAABGhY_GqrWfOZGjpgFv3fiaL0ciM
-- For master Modules deployment check \modules\modulesConfig.ps1
-- For master Custom section features check \custom\customConfig.ps1
-- To see what is happening in the background check logs
-    - In VSC Output terminal (CTRL + SHIFT + U, there switch output to GIT) (pre-commit.ps1 checks)
-    - C:\Windows\Temp\Repo_sync.ps1.log on MGM server (synchronization from GIT repository to share)
-    - C:\Windows\Temp\PS_env_set_up.ps1.log on client (synchronization from share to client)
-
-ENJOY :)
-
-"@
+        Step-OnScreenMSG 8
 
         # Start VSC and open there GIT repository
         $codeCmdPath = "$env:ProgramFiles\Microsoft VS Code\bin\code.cmd"
