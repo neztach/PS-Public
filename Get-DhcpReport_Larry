@@ -1,0 +1,216 @@
+<#
+        # Takes one parameter - the DHCP server name
+        # .\Get-DHCPScopeDNSOption.ps1 <dhcp_server_name>
+ 
+        #$DHCPServer = $args[0]
+        $DHCPServer = "10.200.16.11"
+
+        #Grab all the DHCP scopes, but ignore anything not starting with an IP address (as these lines are the netsh output)
+        $DCHPSCopeList  = (netsh dhcp server \\$DHCPServer show scope) | where {$_ -match '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}'}
+        $FINAL          = @()
+        foreach ($Scope in $DCHPScopeList) {
+        $DHCPINFO   = New-Object Object
+        $DHCPINFO | Add-Member -MemberType Noteproperty -name "Scope Name" -value ($Scope.TrimStart()).TrimEnd()
+        $i          = 0
+        $DNSServers = @()
+        # Look for the IP range in the Scope name and reference it as the match[0] variable for pulling optionvalues
+        $Scope -match '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}.[0-9]{1,3}' | Out-Null
+        $ScopeOptions = (netsh dhcp server \\$DHCPServer scope $matches[0] show optionvalue)
+        foreach ($line in $ScopeOptions) {
+            # Look for Option 6 (Manual DNS Servers) in the optionvalue list for the scope
+            if ($line -match 'OptionId : 6') {
+                $ScopeDNSInfo    = $ScopeOptions[($i+2)..($ScopeOptions.count-1)] # Knowing the format of the output, just take the current line +2 and the total count -1
+                $ScopeDNSInfo[0] -match '\d' | Out-Null                           # Knowing the format of the output, grab the number of DNS Servers in the list
+                $FinalLineNumber = [int]$matches[0] + 1                           # Set up the final line number based on the number of DNS server specified
+                $ScopeDNSList    = $ScopeDNSInfo[2..$FinalLineNumber]             # Just grab the lines that contain DNS servers.
+                foreach ($IPAddress in $ScopeDNSList) {$IPAddress -match '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}.[0-9]{1,3}' | Out-Null; $DNSServers += $matches[0]}
+                $DNSFinal = $DNSServers -join ','
+                $DHCPINFO | Add-Member -MemberType Noteproperty -name "DNS Servers" -value $DNSFinal
+            }
+            $i += 1
+        }
+        if (!($DHCPINFO.'DNS Servers')) {$DHCPINFO | Add-Member -MemberType Noteproperty -name "DNS Servers" -value 'Using Server DNS Options'}
+        $FINAL += $DHCPINFO
+        }
+        $FINAL | Out-GridView
+#>
+
+# Takes one parameter - the DHCP server name
+# .\Get-DHCPScopeDNSOption.ps1 <dhcp_server_name>
+ 
+#$DHCPServer = $args[0]
+$DHCPServer = '10.200.32.11' ### Alter this to change your DHCP server
+
+#region Variables
+$ipformula  = '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}.[0-9]{1,3}'
+$ipformula2 = '\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}'
+$macformula = '[0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}[:-][0-9a-f]{2}'
+#endregion Variables
+
+#Grab all the DHCP scopes, but ignore anything not starting with an IP address (as these lines are the netsh output)
+$DCHPScopeList = (netsh dhcp server $DHCPServer show scope) | Where-Object {$_ -match $ipformula}
+$Final         = @()
+ForEach ($Scope in $DCHPScopeList) {
+    $DHCPINFO  = New-Object -TypeName Object
+    $DHCPINFO | Add-Member -MemberType Noteproperty -name 'Scope Name' -value ($Scope.TrimStart()).TrimEnd()
+    $i         = 0
+
+    ### Look for the IP range in the Scope name and reference it as the match[0] variable for pulling optionvalues
+    $Scope -match $ipformula | Out-Null
+    $ScopeOptions = netsh dhcp server $DHCPServer scope $matches[0] show reservedip
+
+    $lines     = @()
+    ForEach ($j in $ScopeOptions) {
+        Write-Host $j
+        If ($j -match $ipformula) {
+            If ($j -match $macformula){
+                $lines += $j.Trim()
+            }
+        }
+    }
+    $resIP = @()
+    ForEach ($l in $lines){
+        $rParm      = @{Property = 'Server', 'IP', 'MAC'}
+        $Row        = '' | Select-Object @rParm
+        $Row.Server = $DHCPServer
+        $Row.IP     = ($l.substring(0,18)).replace(' ','')
+        $Row.MAC    = ((($l.substring(19,21)).replace(' ','')).replace('-',':')).ToUpper()
+        $resIP     += $Row
+    }
+}
+$resIP
+
+#-------------------
+
+$ResArray            = @()
+$DHCPServer         = '10.200.32.11'  ### Alter this to change your DHCP server
+$DHCPServerListFull = '10.200.16.11','10.200.16.12','10.200.32.11','10.200.32.12'
+$IPFormula          = '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}.[0-9]{1,3}'
+
+ForEach ($dhcpserver in $dhcpserverlistfull){
+    $DHCPScopeList = netsh DHCP Server $DHCPServer Show Scope | Where-Object {$_ -MATCH $IPFormula}
+    ForEach ($entry in $DHCPScopeList){
+        $temp = [STRING]$($entry).TrimStart().Split(' ')[0]
+        $ScopeList = Netsh DHCP Server $DHCPServer Scope $temp Show ReservedIP | Where-Object {$_.TrimStart() -MATCH '^[0-9]'}
+        ForEach ($Scope in $ScopeList){
+            $ResArray += [PsCustomObject][Ordered]@{
+                Server = $DHCPServer
+                Scope  = $temp
+                ResIP  = $Scope.replace(' - ',' ; ').replace(' ','').split(';')[0]
+                ResMAC = ($Scope.replace(' - ',' ; ').replace(' ','').split(';')[1]).replace('-',':').trimend(':').toupper()
+            }
+        }
+    }
+}
+### Output to CSV
+#$ResArray | ExportTo-Csv 'C:\down\dhcpwhatever.csv' -NoTypeInformation -Delimiter ';' -Encoding UTF8
+
+### Output to Scree
+$ResArray | Format-Table -AutoSize
+
+##########
+#remote
+<#
+        Get-DhcpServerInDc | Select-Object DnsName | Where-Object {$_.DnsName -NotLike "*adv*"} | Select-Object -Expand DnsName
+
+        dnsname                  PSComputerName RunspaceId
+        -------                  -------------- ----------
+        cnc-dc01.comanche.local  crrc-dc01      16089178-1cc7-4c5e-bae6-d7f263e186d7
+        cnc-dc02.comanche.local  crrc-dc01      16089178-1cc7-4c5e-bae6-d7f263e186d7
+        ...
+
+
+        Get-DhcpServerV4Scope -ComputerName $DCServer | Where-Object {$_.State -eq "Active"}
+
+        ScopeId     PSComputerName RunspaceId                          
+        -------     -------------- ----------                          
+        10.200.18.0 crrc-dc01      aa5121e4-513a-4b5a-8a4d-d331e895d31d
+        10.200.20.0 crrc-dc01      aa5121e4-513a-4b5a-8a4d-d331e895d31d
+        10.200.22.0 crrc-dc01      aa5121e4-513a-4b5a-8a4d-d331e895d31d
+        ...
+
+
+        Get-DhcpServerV4Reservation -ComputerName $DCServer -ScopeId $Scope.ScopeId.IPAddressToString
+
+        IPAddress            ScopeId              ClientId             Name                 Type                 Description         
+        ---------            -------              --------             ----                 ----                 -----------         
+        10.200.26.155        10.200.26.0          94-b8-6d-bc-b3-e4    FWICNE34.comanche... Both                 Alpha East Wall TV  
+        10.200.26.150        10.200.26.0          0c-54-15-b3-37-60    FWICNE26.comanche... Both                 Break Room TV       
+        10.200.26.151        10.200.26.0          94-b8-6d-bc-39-73    FWICNE27.comanche... Both                 Alpha CTR Wall NW TV
+        ...
+#>
+
+Function Get-AllDhcpRecords {
+    <#
+            .SYNOPSIS
+            Look for all DHCP Leases and Reservations or a specific one.
+            .DESCRIPTION
+            All DHCP records fetch.
+            .PARAMETER find
+            find the last 4 characters of a MAC address
+            .PARAMETER out
+            Output all to CSV.
+            .EXAMPLE
+            Get-AllDhcpRecords -out
+            Outputs all DHCP records to a CSV file
+            .EXAMPLE
+            Get-AllDhcpRecords -find 4fee
+            Gets all DHCP Records and tries to find 4fee in all MAC addresses
+    #>
+    [CmdletBinding()]
+    Param (
+        [string]$find,
+        [switch]$out
+    )
+    ### Export File Path
+    $exportPath = 'C:\down\DHCP_Full.csv'
+
+    ### Bounce out DHCP gathering off of a remote server
+    $session = New-PSSession -ComputerName crrc-dc01
+    $output  = Invoke-Command -Session $session -ScriptBlock {
+        ForEach ($Server in (Get-DhcpServerInDc | Where-Object {$_.DnsName -NotLike '*adv*'} | Select-Object -ExpandProperty DnsName)) {
+            ### Splat our selection Parameters
+            $iSelParms = @{Property = @{n='Server';e={$env:COMPUTERNAME}}, 'ScopeId', 'IPAddress', 'HostName', 'ClientID', 'AddressState'}
+            
+            Get-DHCPServerV4Scope -ComputerName $Server | Where-Object {$_.State -eq 'Active'} | ForEach-Object {
+                Get-DHCPServerv4Lease -ComputerName $Server -ScopeID $_.ScopeID
+            } | Select-Object @iSelParms
+        }
+    }
+    Remove-PSSession -Id $session
+
+    $FoundArray   = @()
+    ### Iterate through results and sort between reserved and leased.
+    ForEach ($e in $output){
+        $FoundArray += [PsCustomObject][Ordered]@{
+            Server      = $e.Server
+            Scope       = $e.ScopeId
+            IPAddress   = $e.IPAddress
+            HostName    = $e.HostName
+            MAC         = $e.ClientId.replace('-',':').toupper()
+            MacSearch   = $e.ClientId.replace('-','')
+            Reservation = If ($e.AddressState -match 'Reservation') {$true} Else {$false}
+            State       = $e.AddressState
+        }
+    }
+
+    If ($find) {
+        $toReturn = $FoundArray | Where-Object {$_.MACSearch -match $find}
+        If ($toReturn){
+            return $toReturn
+        } Else {
+            return 'No results found.'
+        }
+    }
+    If ($out) {
+        $SelSplat = @{Property = 'Server', 'Scope', 'IPAddress', 'HostName', 'MAC', 'Reservation', 'State'}
+        $FoundArray | Select-Object @SelSplat | Export-CSV -Path $exportPath -NoTypeInformation -Delimiter ';' -Encoding UTF8
+    } Else {
+        ### Output to Gridview
+        $SelParams = @{Property = 'Server', 'Scope', 'IPAddress', 'HostName', 'MAC', 'State'}
+        $toReturn  = $FoundArray | Where-Object {$_.IPAddress -notlike '172.*'} | Select-Object @SelParams
+        $Staging   = $toReturn | Out-GridView -Title ('Found: {0}' -f $toReturn.Count) -OutputMode Single
+        return $Staging
+    }
+}
+
