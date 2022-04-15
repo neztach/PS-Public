@@ -1,42 +1,86 @@
 Function Get-DHCPReport {
+    <#
+            .SYNOPSIS
+            Get a report of all DHCP devices.
+            .DESCRIPTION
+            Get a report of all DHCP devices and/or leverage that to find the last 4 of a MAC.
+            .PARAMETER server
+            Specify which DHCP server to inventory.
+            .PARAMETER find
+            Last 4 characters of a MAC address you're trying to find.
+            .PARAMETER toFile
+            Simple switch to prompt you where to save a CSV file for results.
+            .PARAMETER grid
+            Output to gridview.
+            .EXAMPLE
+            Get-DHCPReport -server <ServerName> -find Value -toFile -grid
+    #>
     [CmdletBinding()]
-    Param ($server)
-    If (!$server){
-        $DHCPServers = Get-DhcpServerInDc
-    } else {
-        $DHCPServers = $server
-    }
-    $ResHash = New-Object -TypeName System.Collections.Arraylist
+    Param (
+        [string]$server,
+        [string]$find,
+        [switch]$toFile,
+        [switch]$grid
+    )
+    Begin {
+        If (!$server){
+            $DHCPServers = Get-DhcpServerInDc | Select-Object -ExpandProperty DnsName
+        } Else {
+            $DHCPServers = $server
+        }
     
-    ForEach ($DHCPServer in $DHCPServers.DnsName) {
-        $output = Get-DHCPServerV4Scope -ComputerName $DHCPServer | 
+        $Res = @()
+    }
+    Process {
+        ForEach ($DHCPServer in $DHCPServers) {
+            $sName = $DHCPServer.split('.')[0]
+            $SelPm = @{
+                Property = @{n = 'Server'; e = {$sName}}, 
+                       'ScopeId', 
+                       'IPAddress', 
+                       'HostName', 
+                       'ClientID', 
+                       'AddressState'
+            }
+            $output = Get-DHCPServerV4Scope -ComputerName $DHCPServer | 
                   Where-Object {$_.State -eq 'Active'} | 
                   Where-Object {$_.ScopeId -notlike '172*'} | 
-                  ForEach-Object {Get-DHCPServerv4Lease -ComputerName $DHCPServer -ScopeID $_.ScopeID} | 
-                  Select-Object -Property @{n='Server';e={$DHCPServer.split('.')[0]}},
-                                          ScopeId,
-                                          IPAddress,
-                                          HostName,
-                                          ClientID,
-                                          AddressState
-        ForEach ($e in $output){
-            if ($e.AddressState -like "*Reservation"){
-                $res = 'Yes'
-            } else {
-                $res = 'No'
+                  ForEach-Object {
+                      Get-DHCPServerv4Lease -ComputerName $DHCPServer -ScopeID $_.ScopeID
+                  } | 
+                  Select-Object @SelPm
+
+            ForEach ($e in $output){
+                If ($e.AddressState -like '*Reservation'){$res = 'Yes'} Else {$res = 'No'}
+                $Res += [PsCustomObject][Ordered]@{
+                    Server      = $e.Server
+                    Scope       = $e.ScopeId
+                    IPAddress   = $e.IPAddress
+                    HostName    = $e.HostName
+                    MAC         = $e.ClientId.replace('-',':').toupper()
+                    MACSearch   = $e.ClientID.replace('-','')
+                    State       = $e.AddressState
+                    Reservation = $res
+                }
             }
-            $null = $ResHash.add((New-Object -TypeName PSObject -Property @{
-                Server      = $e.Server
-                Scope       = $e.ScopeId
-                IPAddress   = $e.IPAddress
-                HostName    = $e.HostName
-                MAC         = $e.ClientId.replace('-',':').toupper()
-                State       = $e.AddressState
-                Reservation = $res
-           }))
+        }
+    
+        If ($find) {
+            $DHCPReportResults = $Res | Where-Object {$_.MACSearch -match $find}
+        } Else {
+            $DHCPReportResults = $Res
+        }
+        $DHCPReportResults = $DHCPReportResults | Select-Object -Property * -ExcludeProperty MACSearch
+    }
+    End {
+        ### If 'grid' *or* 'toFile' -> neither of those choices results in output to screen
+        If ($grid) {
+            $DHCPReportResults | Out-GridView -Title ('Total Devices returned: {0}' -f $DHCPReportResults.Count) -PassThru
+        } ElseIf ($toFile) {
+            $exportPath = Read-Host -Prompt 'Path and Filename (C:\some\path\this-csv-file.csv):'
+            Export-Csv -Path $exportPath -InputObject $DHCPReportResults -Encoding UTF8 -NoTypeInformation
+        } Else {
+            Return $DHCPReportResults
         }
     }
-    $DHCPReportResults = $ResHash | Select-Object -Property Server,Scope,IPAddress,HostName,MAC,State,Reservation
-    Return $DHCPReportResults
 }
-Get-DHCPReport | Out-GridView
