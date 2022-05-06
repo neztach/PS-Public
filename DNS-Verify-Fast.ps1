@@ -15,15 +15,12 @@ function Get-DNSIssues {
 
       Will iterate through all DNS records and show only those that match the word testmachine
     #>
-    param([string]$PCName)
+    Param ([string]$PCName)
 
-    import-module -Name dnsserver
+    Import-Module -Name dnsserver
     
     ### Get PDC to use as DNS server to query
-    $PDC    = ([DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()).DomainControllers | 
-              Select-Object -Property Forest,@{n='Name';e={$_.Name.Split('.')[0]}},Roles | 
-              Where-Object {$_.Roles -contains 'pdc'} | 
-              Select-Object -ExpandProperty Name
+    $PDC    = ([DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()).DomainControllers | Select-Object -Property Forest,@{n='Name';e={$_.Name.Split('.')[0]}}, Roles | Where-Object {$_.Roles -contains 'pdc'} | Select-Object -ExpandProperty Name
     
     ### If you would rather specify the DNS server to query, comment 
     ### out the above and uncomment out the below
@@ -41,13 +38,10 @@ function Get-DNSIssues {
     }
     
     ### Get Reverse Lookup Zones
-    $ReverseLookupZones = Get-DnsServerZone -ComputerName $PDC | 
-                          Where-Object IsReverseLookupZone -eq $True | 
-                          Where-Object IsAutoCreated -eq $False | 
-                          Where-Object ZoneName -notlike '*ip6*'
+    $ReverseLookupZones = Get-DnsServerZone -ComputerName $PDC | Where-Object IsReverseLookupZone -eq $True | Where-Object IsAutoCreated -eq $False | Where-Object ZoneName -notlike '*ip6*'
   
     ### Iterate through the Reverse lookup zones
-    foreach ($ReverseLookupZone in $ReverseLookupZones) {
+    ForEach ($ReverseLookupZone in $ReverseLookupZones) {
         #region Variables
         $Servers         = $Null
         ### Get Zone Information
@@ -61,11 +55,10 @@ function Get-DNSIssues {
         $ReverseIPSuffix = $ReverseIPSuffix -join '.'
         
         ### Get Servers
-        $Servers = Get-DnsServerResourceRecord -ZoneName $DNSZoneName -ComputerName $PDC | 
-                   Where-Object HostName -ne '@'
+        $Servers = Get-DnsServerResourceRecord -ZoneName $DNSZoneName -ComputerName $PDC | Where-Object HostName -ne '@'
         
         ### Iterate through $Servers
-        foreach ($Server in $Servers) {
+        ForEach ($Server in $Servers) {
             ### Get Server IP Address
             $ServerHostName  = $Server.HostName
             $ServerIPSuffix  = $ServerHostName.Split('.')
@@ -101,17 +94,17 @@ function Get-DNSIssues {
                                 }))
                         Break
                     }
-                } else {
+                } Else {
                     Write-Host (('FWD Record not found for {0} of PTR Record {1}' -f $ServerDNSName, $ServerIPAddress)) -ForegroundColor Red
                     $DNSName = $null
                 }
             }
             
             ### If DNSName resolves
-            if ($DNSName) {
+            If ($DNSName) {
                 ### Clear Values
                 $Control = 0
-                foreach ($DNSRecord in $DNSName) {
+                ForEach ($DNSRecord in $DNSName) {
                     ### Get Reverse DNS Name
                     $DNSIPAddress = $DNSRecord.IPAddress
                     
@@ -135,7 +128,7 @@ function Get-DNSIssues {
                 }
                 ### If Control is not set to 1 that means FWD record doesn't match PTR record.
                 ### These are the DNS entries that are bad.
-                if ($Control -eq '0') {
+                If ($Control -eq '0') {
                     #$Output = $ServerIPAddress + ";" + $ServerDNSSubnet + ";" + $ServerDNSName + ";" + $DNSIPAddress ### If Sending to ouput file
                     $null = $DNSErr.add((New-Object -TypeName PSObject -Property @{
                                 PTR     = $sip
@@ -152,7 +145,7 @@ function Get-DNSIssues {
     If ($PCName){
         $PCFound = $PCFound | Select-Object -Property Subnet,DNSName,FWD,PTR
         Return $PCFound
-    } else {
+    } Else {
         $DNSErr = $DNSErr | Select-Object -Property Subnet,DNSName,FWD,PTR
         Return $DNSErr
     }

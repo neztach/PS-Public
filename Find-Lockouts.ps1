@@ -43,10 +43,10 @@ Function Find-Lockouts {
             $StepOne = Search-ADAccount -LockedOut | Select-Object -Property Name,@{n='Username';e={$_.SamAccountName}} | Sort-Object -Property Name
 
             ### 2. Put up menu (gridview) of locked accounts or tell user none were found
-            $StepTwo = If ($StepOne){
+            $StepTwo = If ($StepOne) {
                 #SINGLE $StepOne | Select-Object -Property Username,Name | Out-GridView -Title "User unlocker $(Get-Date)" -OutputMode Single
                 $StepOne | Select-Object -Property Username,Name | Out-GridView -Title "User unlocker $(Get-Date)" -Passthru
-            } else {
+            } Else {
                 [Windows.MessageBox]::Show('No locked out users found')
             }
 
@@ -61,7 +61,7 @@ Function Find-Lockouts {
                     #SINGLE Get-ADUser $lockeduser | Unlock-ADAccount
                     Get-ADUser -Identity $lockedusername | Unlock-ADAccount
                 }
-            } else {
+            } Else {
                 Write-Host 'No user selected' -ForegroundColor Yellow
             }
 
@@ -70,11 +70,11 @@ Function Find-Lockouts {
             ForEach ($verification in $unlocks){
                 #SINGLE If ($StepTwo.Username){
                 $v = Get-UserLockedOut -Checkuser $verification
-                if ($v.Lockedout -eq $false){
+                If ($v.Lockedout -eq $false){
                     #SINGLE Write-Host "Unlocked: $($lockeduser.name)" -ForegroundColor Green
                     Write-Host ('Unlocked: {0}' -f $v.name) -ForegroundColor $GRN
                     Return
-                } else {
+                } Else {
                     #SINGLE Write-Host "Unable to unlock $($lockeduser.name)" -ForegroundColor Red
                     Write-Host ('Unable to unlock {0}' -f $v.name) -ForegroundColor Red
                     #SINGLE $lockedUser.DistinguishedName
@@ -83,13 +83,13 @@ Function Find-Lockouts {
                 }
             }
             $LockedOutUsers | Select-object -Property SamAccountName,Name
-        } else {
+        } Else {
             Write-Host 'Checked for user lockouts - none found.' -ForegroundColor $GRN
         }
-    } else {
+    } Else {
         If ($LockedOutUsers){
             $LockedOutUsers | Select-Object -Property SamAccountName,Name
-        } else {
+        } Else {
             Write-Host 'No locked out users to report' -ForegroundColor $GRN
         }
     }

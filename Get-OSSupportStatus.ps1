@@ -8,22 +8,20 @@ Begin {
             [Parameter(Mandatory=$true,HelpMessage='Array')][Array]$Data,
             [Parameter(Mandatory=$true)][bool]$JU
         )
-        $G = @{ForegroundColor = 'Green'}
-        $Y = @{ForegroundColor = 'Yellow'}
-        $R = @{ForegroundColor = 'Red'}
+        $G     = @{ForegroundColor = 'Green'}
+        $Y     = @{ForegroundColor = 'Yellow'}
+        $R     = @{ForegroundColor = 'Red'}
         $today = Get-Date
 
         If ($JU) {
             $End = $Data | Where-Object {$_.Name -Match $_.DisplayName} | Select-Object -ExpandProperty End
             If ($today -lt $End){
                 Write-Host ('{0} - Still Supported (EOL: {1})' -f $Data.Name, ($End)) @G
-            } Else{
+            } Else {
                 Write-Host 'OS out of support' @R
                 If ($_.Extended) {
                     $End = $Data | Where-Object {$_.Name -Match $_.DisplayName} | Select-Object -ExpandProperty Extended
-                    If ($today -lt $End){
-                        Write-Host ('{0} - ESU is still supported (EOL: {1})' -f $Data.Name, ($End)) @Y
-                    }
+                    If ($today -lt $End) {Write-Host ('{0} - ESU is still supported (EOL: {1})' -f $Data.Name, ($End)) @Y}
                 }
             }
         } Else {
@@ -58,7 +56,7 @@ Begin {
         }
         Try {
             #Works on 2016/W10/W8
-            $TryHeaders = $PreHeaders
+            $TryHeaders         = $PreHeaders
             $TryHeaders.Add('user-agent','Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36')
             $TryHeaders.Add('accept','*/*')
             $wrongly_called_api = Invoke-WebRequest -ErrorAction SilentlyContinue -Uri "$($PreURL)$search$($PostURL)" -Headers $TryHeaders
@@ -74,16 +72,14 @@ Begin {
     $os_name     = (Get-Item -Path $REG).GetValue('ProductName')
     $search      = $os_name.ToString().Replace(' ','%20')
     $display     = (Get-Item -Path $REG).GetValue('DisplayVersion')
-    If ($display -eq $null){$display = [Environment]::OSVersion.Version.Build}
+    If ($null -eq $display) {$display = [Environment]::OSVersion.Version.Build}
 }
 Process {
     $OSEOL       = Get-OSEOL
-
     $json        = $OSEOL.Content | ConvertFrom-Json
-    If (($json.results.end) -eq $null){
+    If ($null -eq ($json.results.end)) {
         $JsonC         = $true
         $search_result = Invoke-WebRequest -Uri ('https://docs.microsoft.com/en-us' + $json.results.Url)
-
         $dates         = ($search_result.Content -split '<tbody>' -split '</tbody>' )[1,3] -split '</tr>'
         $headers       = (($search_result.Content -split '<tbody>' -split '</tbody>' )[0] -split '<thead>' -split '</thead>')[1] -split '<tr>' -split '</tr>'
         $headers       = (($headers -split '<th align="right">')[2..(($headers -split '<th align="right">').Count)] -replace '</th>').Trim() | Where-Object {$_}
@@ -103,7 +99,6 @@ Process {
     }
 
     $sorted_info = @()
-
     $dates | ForEach-Object {
         $minmax = ($_ -split "<local-time datetime=`"")[1..(($_ -split "<local-time datetime=`"").Count -1)] | ForEach-Object {(($_ -split '</local-time>')[0] -split '">')[1]}
         If ($minmax -ne $null) {

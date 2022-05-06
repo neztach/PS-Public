@@ -33,25 +33,18 @@ Function Get-DHCPReport {
     }
     Process {
         ForEach ($DHCPServer in $DHCPServers) {
-            $sName = $DHCPServer.split('.')[0]
-            $SelPm = @{
-                Property = @{n = 'Server'; e = {$sName}}, 
-                       'ScopeId', 
-                       'IPAddress', 
-                       'HostName', 
-                       'ClientID', 
-                       'AddressState'
-            }
+            $sName  = $DHCPServer.split('.')[0]
+            $SelPm  = @{Property = @{n='Server';e={$sName}}, 'ScopeId', 'IPAddress', 'HostName', 'ClientID', 'AddressState'}
             $output = Get-DHCPServerV4Scope -ComputerName $DHCPServer | 
-                  Where-Object {$_.State -eq 'Active'} | 
-                  Where-Object {$_.ScopeId -notlike '172*'} | 
-                  ForEach-Object {
-                      Get-DHCPServerv4Lease -ComputerName $DHCPServer -ScopeID $_.ScopeID
-                  } | 
-                  Select-Object @SelPm
+                      Where-Object {$_.State -eq 'Active'} | 
+                      Where-Object {$_.ScopeId -notlike '172*'} | 
+                      ForEach-Object {
+                          Get-DHCPServerv4Lease -ComputerName $DHCPServer -ScopeID $_.ScopeID
+                      } | 
+                      Select-Object @SelPm
 
             ForEach ($e in $output){
-                If ($e.AddressState -like '*Reservation'){$res = 'Yes'} Else {$res = 'No'}
+                If ($e.AddressState -like '*Reservation') {$res = 'Yes'} Else {$res = 'No'}
                 $Res += [PsCustomObject][Ordered]@{
                     Server      = $e.Server
                     Scope       = $e.ScopeId

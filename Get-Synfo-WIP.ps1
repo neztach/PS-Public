@@ -174,7 +174,11 @@ Function CreateErrorObject {
             '-2144108250' = 'connection failed'
         }
         If ($err.Exception.ErrorCode) {
-            If ($WsmanErrorCodes["$($err.Exception.ErrorCode)"]) {$WarningMessage = $WsmanErrorCodes["$($err.Exception.ErrorCode)"]} Else {$WarningMessage = $err.Exception.Message}
+            If ($WsmanErrorCodes["$($err.Exception.ErrorCode)"]) {
+                $WarningMessage = $WsmanErrorCodes["$($err.Exception.ErrorCode)"]
+            } Else {
+                $WarningMessage = $err.Exception.Message
+            }
         } Else {
             $WarningMessage = $err.Exception.Message
         }
@@ -182,7 +186,11 @@ Function CreateErrorObject {
     } ElseIf ($Protocol -eq 'Dcom') {
         $RunspaceErrorCodes = @{}
         If ($err.Exception.ErrorCode) {
-            If ($RunspaceErrorCodes["$($err.Exception.ErrorCode)"]) {$WarningMessage = $RunspaceErrorCodes["$($err.Exception.ErrorCode)"]} Else {$WarningMessage = $err.Exception.Message}
+            If ($RunspaceErrorCodes["$($err.Exception.ErrorCode)"]) {
+                $WarningMessage = $RunspaceErrorCodes["$($err.Exception.ErrorCode)"]
+            } Else {
+                $WarningMessage = $err.Exception.Message
+            }
         } Else {
             $WarningMessage=$err.Exception.Message
         }
@@ -232,7 +240,7 @@ Function OutResult {
                 Update-FormatData -PrependPath $($env:TEMP+'\SystemInfoAutoformat.ps1xml') -ErrorAction SilentlyContinue
                 Set-Variable -Name UpdateFormatData -Value $false -Scope 1 -Force
             }
-            $Result.psobject.typenames.insert(0,'ModuleSystemInfo.Systeminfo.AutoFormatObject') 
+            $Result.PSObject.TypeNames.Insert(0,'ModuleSystemInfo.Systeminfo.AutoFormatObject') 
             $Result
             $Global:Result += $Result
         }
@@ -266,7 +274,7 @@ Function CreateResult {
                 Write-Verbose -Message ("$ComputerName Add to result $Property=$($_.Action)")
                 $ResultParamProperty = & $Action    
             }
-            If ($ResultParamProperty -eq $null) {
+            If ($null -eq $ResultParamProperty) {
                 $ResultParamProperty = 'NotSupported'
             }
             $Result | Add-Member -MemberType NoteProperty -Name $Property -Value $ResultParamProperty
@@ -296,12 +304,13 @@ Function FormatObject {
             } Else {
                 $ForObjectProperty = $Forobject.$Property
             }
-            If ($ForObjectProperty -eq $null) {
+            If ($null -eq $ForObjectProperty) {
                 $XmlFormatList += "
                     <ListItem>
                         <PropertyName>$Property</PropertyName>
                     </ListItem>"
             } ElseIf ($ForObject.RunspaceId) {
+                
             } ElseIf ($PropertyParams[$Property].FormatList) {
                 $XmlFormatList += "
                     <ListItem>
@@ -549,18 +558,18 @@ Function GetHddSmart {
             '5' = 'SCM'
         }
         Write-Verbose -Message "$ComputerName Windows 8 or later detected"
-        If ($credential -eq $null) {
+        If ($null -eq $credential) {
             $MSFT_PhysicalDisk = Get-WmiObject -Class MSFT_PhysicalDisk -Namespace root\Microsoft\Windows\Storage -ComputerName $computername -ErrorAction SilentlyContinue
         } Else {
             $MSFT_PhysicalDisk = Get-WmiObject -Class MSFT_PhysicalDisk -Namespace root\Microsoft\Windows\Storage -ComputerName $computername -Credential $credential -ErrorAction SilentlyContinue
         }
-        If ($MSFT_PhysicalDisk -ne $null) {
+        If ($null -ne $MSFT_PhysicalDisk) {
             $AllHddSmart | ForEach-Object {
                 $HddSmart      = $_
                 $MsftDisk      = $MSFT_PhysicalDisk | Where-Object {$_.DeviceId -eq $HddSmart.index} 
                 $InterfaceType = $BusTypeHashTable["$($MsftDisk.bustype)"]
                 $MediaType     = $MediaTypeHashTable["$($MsftDisk.mediatype)"]
-                If ($InterfaceType -ne $null) {$HddSmart.InterfaceType = $InterfaceType}
+                If ($null -ne $InterfaceType) {$HddSmart.InterfaceType = $InterfaceType}
                 $HddSmart | Add-Member -MemberType NoteProperty -Name Type -Value $MediaType
             }
             $AllHddSmart
@@ -604,10 +613,10 @@ Function GetInstalledSoftware {
                 $ChildPath = Join-Path -Path $RootKey -ChildPath $_      
                 $AppName   = $null
                 $AppName   = RegGetValue -key $ChildPath -Value 'DisplayName' -GetValue GetStringValue -ErrorAction SilentlyContinue
-                If ($AppName -ne $null) {
-                    If ($PSBoundParameters['MatchSoftwareName'] -ne $null) {
+                If ($null -ne $AppName) {
+                    If ($null -ne $PSBoundParameters['MatchSoftwareName']) {
                         If ($AppName -match $MatchSoftwareName) {CreateSoftwareInfo} Else {Write-Verbose -Message "Skip $AppName"}
-                    } ElseIf ($PSBoundParameters['SoftwareName'] -ne $null) {
+                    } ElseIf ($null -ne $PSBoundParameters['SoftwareName']) {
                         If ($AppName -eq $SoftwareName) {CreateSoftwareInfo} Else {Write-Verbose -Message "Skip $AppName"}
                     } Else {
                         CreateSoftwareInfo   
@@ -623,9 +632,9 @@ Function GetInstalledSoftware {
         If ($OSArch -eq '64-bit') {
             $RootUninstallKeyX64 = 'HKEY_LOCAL_MACHINE\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall'  
             [array]$SubKeysX64 = RegEnumKey -key $RootUninstallKeyX64
-            If ($PSBoundParameters['MatchSoftwareName'] -ne $null) {
+            If ($null -ne $PSBoundParameters['MatchSoftwareName']) {
                 $AllSoftWare += GetSoftwareFromRegistry -RootKey $RootUninstallKeyX64 -SubKeys $SubKeysX64 -DisplayOSArch '32-bit' -MatchSoftwareName $MatchSoftwareName
-            } ElseIf ($PSBoundParameters['SoftwareName'] -ne $null) {
+            } ElseIf ($null -ne $PSBoundParameters['SoftwareName']) {
                 $AllSoftWare += GetSoftwareFromRegistry -RootKey $RootUninstallKeyX64 -SubKeys $SubKeysX64 -DisplayOSArch '32-bit' -SoftwareName $SoftwareName
             } Else {
                 $AllSoftWare += GetSoftwareFromRegistry -RootKey $RootUninstallKeyX64 -SubKeys $SubKeysX64 -DisplayOSArch '32-bit'
@@ -633,9 +642,9 @@ Function GetInstalledSoftware {
         }
         $RootUninstallKey = 'HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall'
         [array]$SubKeys   = RegEnumKey -key $RootUninstallKey
-        If ($PSBoundParameters['MatchSoftwareName'] -ne $null) {
+        If ($null -ne $PSBoundParameters['MatchSoftwareName']) {
             $AllSoftWare += GetSoftwareFromRegistry -RootKey $RootUninstallKey -SubKeys $SubKeys -DisplayOSArch $OSArch -MatchSoftwareName $MatchSoftwareName
-        } ElseIf ($PSBoundParameters['SoftwareName'] -ne $null) {
+        } ElseIf ($null -ne $PSBoundParameters['SoftwareName']) {
             $AllSoftWare += GetSoftwareFromRegistry -RootKey $RootUninstallKey -SubKeys $SubKeys -DisplayOSArch $OSArch -SoftwareName $SoftwareName
         } Else {
             $AllSoftWare += GetSoftwareFromRegistry -RootKey $RootUninstallKey -SubKeys $SubKeys -DisplayOSArch $OSArch
@@ -644,7 +653,7 @@ Function GetInstalledSoftware {
             $AllSoftWare | Sort-Object -Property {$_.AppName} -Unique | ForEach-Object {
                 $ReturnSoftware = $True
                 $Software       = $_
-                If ($PSBoundParameters['MatchExcludeSoftware'] -ne $null) {
+                If ($null -ne $PSBoundParameters['MatchExcludeSoftware']) {
                     $MatchExcludeSoftware | ForEach-Object {
                         If ($Software.AppName -match "^$_") {$ReturnSoftware = $false}
                     }
@@ -681,8 +690,8 @@ Function GetSmbiosStruct {
     } Else {
         Write-Error -Message 'Unknown offset..'
     }
-    If ($MSSMBios_RawSMBiosTables -eq $null) {
-        If ($Computername -eq $null) {$Computername = $env:COMPUTERNAME}
+    If ($null -eq $MSSMBios_RawSMBiosTables) {
+        If ($null -eq $Computername) {$Computername = $env:COMPUTERNAME}
         If ($credential) {
             $MSSMBiosData = (Get-WmiObject -Class MSSMBios_RawSMBiosTables -Namespace root\wmi -ComputerName $Computername -Credential $credential -ErrorAction SilentlyContinue).SMBiosData
         } Else {
@@ -691,10 +700,10 @@ Function GetSmbiosStruct {
     } Else {
         $MSSMBiosData = $MSSMBios_RawSMBiosTables | ForEach-Object {$_.SmBiosData}    
     }
-    If ($MSSMBiosData -ne $null) {
+    If ($null -ne $MSSMBiosData) {
         $i      = 0
         $Struct = $null
-        While (($MSSMBiosData[$i+1] -ne $null) -and ($MSSMBiosData[$i+1] -ne 0)) {
+        While (($null -ne $MSSMBiosData[$i+1]) -and ($MSSMBiosData[$i+1] -ne 0)) {
             # While the structure has non-0 length
             $i0 = $i
             $n  = $MSSMBiosData[$i]   # Structure type
@@ -712,7 +721,7 @@ Function GetSmbiosStruct {
             $i++ # Skip the string list terminator NUL
             If ($n -eq $Type) {$Struct = $MSSMBiosData[$i0..$i1]}
         }
-        If ($Struct -ne $null) {
+        If ($null -ne $Struct) {
             If ($Value -eq 'String') {
                 $StringIndex = $Struct[$OffsetDecValue]
                 If ($StringIndex -ne 0) {
@@ -746,7 +755,7 @@ Function GetUserProfile {
     [CmdletBinding()]
     Param([switch]$OnlyLoaded)
     Try {
-        If ($win32_userprofile -eq $null) {Write-Error -Message 'Variable Win32_UserProfile is null' -ErrorAction Stop}
+        If ($null -eq $win32_userprofile) {Write-Error -Message 'Variable Win32_UserProfile is null' -ErrorAction Stop}
         $AllUserProfiles      = @()
         [string[]]$ExcludeSid = 'S-1-5-18','S-1-5-19','S-1-5-20'
         If ($credential) {
@@ -756,7 +765,7 @@ Function GetUserProfile {
         }
         If ($PSBoundParameters['OnlyLoaded'].IsPresent) {
             $Win32UserProfiles = $Win32_UserProfile | Where-Object {!($ExcludeSid -eq $_.sid) -and $_.loaded} 
-            If ($Win32UserProfiles -eq $null) {Write-Error -Message 'User profile is not loaded'}
+            If ($null -eq $Win32UserProfiles) {Write-Error -Message 'User profile is not loaded'}
         } Else {
             $Win32UserProfiles = $Win32_UserProfile | Where-Object {!($ExcludeSid -eq $_.sid)} 
         }
@@ -774,7 +783,7 @@ Function GetUserProfile {
             } Catch {
                 Write-Verbose -Message "$Computername Unknown sid $sid"
                 $User = ($LocalAccount | Where-Object {$_.sid -eq $Sid}).caption
-                If ($User -eq $null) {$User = 'Unknown'}
+                If ($null -eq $User) {$User = 'Unknown'}
             }
             $_ | Add-Member -MemberType NoteProperty -Name User -Value $User
             $_
@@ -867,7 +876,7 @@ Function PsJob {
                     $Job      = $_
                     $PsJob    = $_.PsJob
                     $TmpErRec = $PsJob | Receive-Job -ErrorAction Stop
-                    If ($TmpErRec -eq $null) {Write-Warning -Message "$($PsJob.location) Job state failed, no error returned"}
+                    If ($null -eq $TmpErRec) {Write-Warning -Message "$($PsJob.location) Job state failed, no error returned"}
                     Remove-Job -Id $PsJob
                     $MainJobs.Remove($Job)
                 }
@@ -880,7 +889,7 @@ Function PsJob {
                     $Computername  = $Job.location
                     $ReceivePsJob  = @()
                     $ReceivePsJob += Receive-Job -Job $PsJob -ErrorAction Stop
-                    If ($ReceivePsJob.Count -eq 0 -or $ReceivePsJob[0] -eq $null) {
+                    If ($ReceivePsJob.Count -eq 0 -or $null -eq $ReceivePsJob[0]) {
                         Write-Warning -Message "$Computername InvokeCommand return empty value.."
                     } Else {
                         Write-Verbose -Message "$Computername Information Completed"
@@ -891,7 +900,7 @@ Function PsJob {
                 }
             }
             $AllTimeOutJob = $MainJobs | Where-Object {(New-TimeSpan -start $_.StartTime).TotalSeconds -gt $JobTimeOut}
-            If ($AllTimeOutJob -ne $null) {
+            If ($null -ne $AllTimeOutJob) {
                 $AllTimeOutJob | ForEach-Object {
                     Try {
                         $Job = $_
@@ -912,7 +921,7 @@ Function PsJob {
             If ($_.class) {
                 $WmiParam = $_
                 $Wmi      = @{}
-                If ($Credential -ne $null) {If (!($LocalComputer -eq $ComputerName)) {If (!($WmiParam['Credential'])) {$WmiParam.Add('Credential',$Credential)}}}
+                If ($null -ne $Credential) {If (!($LocalComputer -eq $ComputerName)) {If (!($WmiParam['Credential'])) {$WmiParam.Add('Credential',$Credential)}}}
                 If ($jobs.count -ge $MaxWmiJob) {
                     Do {
                         $repeat=$true
@@ -954,7 +963,7 @@ Function PsJob {
                 Try {
                     $Job      = $_.WmiJob
                     $TmpErRec = $Job | Receive-Job -ErrorAction Stop
-                    If ($TmpErRec -eq $null) {If ($VerbosePreference -eq 'Continue') {Write-Warning -Message "$($Job.location) $($_.Class) JobState Failed Get-WmiObject return Null Value"}}
+                    If ($null -eq $TmpErRec) {If ($VerbosePreference -eq 'Continue') {Write-Warning -Message "$($Job.location) $($_.Class) JobState Failed Get-WmiObject return Null Value"}}
                     Remove-Job -Id $Job
                     $Jobs.Remove($_)
                 } Catch {
@@ -970,7 +979,7 @@ Function PsJob {
                 $Computername = $_.location
                 $GetWmi       = @()
                 $GetWmi      += Receive-Job -Job $Job -ErrorAction Stop
-                If ($GetWmi.Count -eq 0 -or $GetWmi[0] -eq $null) {
+                If ($GetWmi.Count -eq 0 -or $null -eq $GetWmi[0]) {
                     If ($VerbosePreference -eq 'Continue') {Write-Warning -Message "$Computername $($_.Class) Get-Wmiobject return empty value.."}
                 } ElseIf ($GetWmi.count -eq 1) {
                     Write-Verbose -Message "$Computername Receive-Job $wminame Completed"
@@ -1032,7 +1041,7 @@ Function Registry {
             [parameter(Mandatory=$true)][string]$Value,
             [parameter(Mandatory=$true)][ValidateSet('GetStringValue','GetBinaryValue','GetDWORDValue','GetQWORDValue','GetMultiStringValue')][string]$GetValue
         )
-        If ($stdregprov -eq $null) {Write-Error -Message 'Variable StdRegProv Null'}
+        If ($null -eq $stdregprov) {Write-Error -Message 'Variable StdRegProv Null'}
         $ResultProp = @{
             'GetStringValue'      = 'Svalue'
             'GetBinaryValue'      = 'Uvalue'
@@ -1063,7 +1072,7 @@ Function Registry {
                 Write-Error -Message "$($matches[1]) Does not belong to the set $($hk.Keys)" -ErrorAction Stop
             }
             If ($StdRegProvResult.returnvalue -ne 0) {
-                If ($ErrorCode["$($StdRegProvResult.returnvalue)"] -ne $null) {
+                If ($null -ne $ErrorCode["$($StdRegProvResult.returnvalue)"]) {
                     $er = $ErrorCode["$($StdRegProvResult.returnvalue)"]
                     Write-Error -Message "$Er! Key $Key Value $Value "
                 } Else {
@@ -1081,7 +1090,7 @@ Function Registry {
     Function RegEnumKey {
         Param ([parameter(Mandatory=$true)][string]$Key)
         $ErrorActionPreference = 'Stop'
-        If ($stdregprov -eq $null) {Write-Error -Message 'Variable StdRegProv Null'}
+        If ($null -eq $stdregprov) {Write-Error -Message 'Variable StdRegProv Null'}
         $ErrorCode = @{
             '1' = "Value doesn't exist"
             '2' = "Key doesn't exist"
@@ -1098,7 +1107,7 @@ Function Registry {
         If ($Key -match '(.+?)\\(.+)') {
             $StdRegProvResult = $StdRegProv.EnumKey($hk[$matches[1]],$matches[2])
             If ($StdRegProvResult.returnvalue -ne 0) {
-                If ($ErrorCode["$($StdRegProvResult.returnvalue)"] -ne $null) {$er = $ErrorCode["$($StdRegProvResult.returnvalue)"]} Else {$er = $StdRegProvResult.returnvalue}
+                If ($null -ne $ErrorCode["$($StdRegProvResult.returnvalue)"]) {$er = $ErrorCode["$($StdRegProvResult.returnvalue)"]} Else {$er = $StdRegProvResult.returnvalue}
                 Write-Error -Message "$Er key $Key"
             } Else {
                 $StdRegProvResult.snames
@@ -1111,7 +1120,7 @@ Function Registry {
     Function RegEnumValues {
         Param ([parameter(Mandatory=$true)][string]$Key)
         $ErrorActionPreference = 'Stop'
-        If ($stdregprov -eq $null) {Write-Error -Message 'Variable StdRegProv Null'}
+        If ($null -eq $stdregprov) {Write-Error -Message 'Variable StdRegProv Null'}
         $ErrorCode = @{
             '1' = "Value doesn't exist"
             '2' = "Key doesn't exist"
@@ -1128,7 +1137,7 @@ Function Registry {
         If ($Key -match '(.+?)\\(.+)') {
             $StdRegProvResult = $StdRegProv.EnumValues($hk[$matches[1]],$matches[2])
             If ($StdRegProvResult.returnvalue -ne 0) {
-                If ($ErrorCode["$($StdRegProvResult.returnvalue)"] -ne $null) {$er = $ErrorCode["$($StdRegProvResult.returnvalue)"]} Else {$er = $StdRegProvResult.returnvalue}
+                If ($null -ne $ErrorCode["$($StdRegProvResult.returnvalue)"]) {$er = $ErrorCode["$($StdRegProvResult.returnvalue)"]} Else {$er = $StdRegProvResult.returnvalue}
                 Write-Error -Message "$Er key $Key"
             } Else {
                 $StdRegProvResult.snames
@@ -1148,7 +1157,7 @@ Function Runspacejob {
             If ($_.class) {
                 $WmiParam = $_
                 $Wmi      = @{}
-                If ($Credential -ne $null) {  
+                If ($null -ne $Credential) {  
                     $Wmi.Add('Credential',$Credential)
                     <#if (!($WmiParam["Credential"]))
                     {
@@ -1201,7 +1210,7 @@ Function Runspacejob {
                     $Job    = $_
                     Write-Verbose -Message "$($_.location) End Invoke"
                     $TmpRes = $_.powershell.EndInvoke($_.State)
-                    If ($_.PowerShell.Streams.Error[0] -ne $null) {
+                    If ($null -ne $_.PowerShell.Streams.Error[0]) {
                         Write-Error -Message "$($_.PowerShell.Streams.Error[0])" -ErrorAction Stop
                         <#if ($TmpRes.count -eq 0)
                         {
@@ -1211,7 +1220,7 @@ Function Runspacejob {
                         } else {
                             Write-Error "Unknown Error $($TmpRes[0])" -ErrorAction Stop
                         }#>
-                    } ElseIf ($TmpRes[0] -ne $null) {
+                    } ElseIf ($null -ne $TmpRes[0]) {
                         If ($TmpRes[0].GetType().name -eq 'ErrorRecord') {Write-Error -Message $TmpRes[0] -ErrorAction Stop}
                         Write-Verbose -Message "$($Job.location) RunspaceJob Completed"
                         $TmpRes
@@ -1425,11 +1434,11 @@ Function CpuSocket {
     }
     $Win32_Processor | ForEach-Object {
         $CpuName = $($_.name -replace '\s+',' ')
-        If ($CpuNameSocket[$CpuName] -eq $null) {
+        If ($null -eq $CpuNameSocket[$CpuName]) {
             If (($_.SocketDesignation -replace '\s+','') -match '\w+\d{2,}' -and $_.SocketDesignation -ne $_.name ) {
                 $_.SocketDesignation
             } Else {
-                If ($CPU_UpgradeMethod["$($_.UpgradeMethod)"] -eq $null) {'Unknown'} Else {$CPU_UpgradeMethod["$($_.UpgradeMethod)"]}
+                If ($null -eq $CPU_UpgradeMethod["$($_.UpgradeMethod)"]) {'Unknown'} Else {$CPU_UpgradeMethod["$($_.UpgradeMethod)"]}
             }
         } Else {
             $CpuNameSocket[$CpuName] 
@@ -1559,9 +1568,9 @@ Function MemoryModules {
         Write-Verbose -Message "$Computername GetSmbiosStruct"
         $DecMemtype = GetSmbiosStruct -Type 17 -Offset 12h -Value Other -ErrorAction SilentlyContinue  
         Write-Verbose -Message "DecMemtype $DecMemtype"
-        If ($DecMemtype -ne 1 -and $DecMemtype -ne 2 -and $DecMemtype -ne $null) {$Smbios = $true}
+        If ($DecMemtype -ne 1 -and $DecMemtype -ne 2 -and $null -ne $DecMemtype) {$Smbios = $true}
         If (!$Smbios) {
-            If ($win32_processor -eq $null) {
+            If ($null -eq $win32_processor) {
                 If ($credential) {
                     $win32_processor = Get-WmiObject -Class win32_processor -Namespace root\cimv2 -ComputerName $computername -Credential $credential -ErrorAction SilentlyContinue
                 } Else {
@@ -1569,7 +1578,7 @@ Function MemoryModules {
                     $win32_processor = Get-WmiObject -Class win32_processor -Namespace root\cimv2 -ComputerName $computername -ErrorAction SilentlyContinue
                 }
             }
-            If ($win32_processor -ne $null) {
+            If ($null -ne $win32_processor) {
                 If ($Win32_Processor.Manufacturer -eq 'GenuineIntel') {
                     Write-Verbose -Message 'Intel Processor'
                     $CpuDescript = $win32_processor.Description
@@ -1585,7 +1594,7 @@ Function MemoryModules {
         }
     }
     $Win32_PhysicalMemory | ForEach-Object {
-        If ($Smbios) {$MemoryType = $MemTypeSmbios[[string]$DecMemtype]} ElseIf ($MemoryType -eq $null) {$MemoryType = $MemTypeWmi[[string]$_.memorytype]}
+        If ($Smbios) {$MemoryType = $MemTypeSmbios[[string]$DecMemtype]} ElseIf ($null -eq $MemoryType) {$MemoryType = $MemTypeWmi[[string]$_.memorytype]}
         $Property = @{
             Capacity     = $_.capacity
             MemoryType   = $MemoryType
@@ -1608,7 +1617,7 @@ Function MemoryTotal {
 }
 
 Function MonName {
-    If ($wmiMonitorID.UserFriendlyName -ne $null) {
+    If ($null -ne $wmiMonitorID.UserFriendlyName) {
 	    $dispname = $null
 	    $dispname = ([Text.Encoding]::ASCII.GetString($wmiMonitorID.UserFriendlyName)).Replace("$([char]0x0000)",'')		
         $dispname
@@ -1618,7 +1627,7 @@ Function MonName {
 }
 
 Function MonPCode {
-    If ($wmiMonitorID.ProductCodeID -ne $null) {		
+    If ($null -ne $wmiMonitorID.ProductCodeID) {		
 	    $dispproduct = $null
         $dispproduct = ([Text.Encoding]::ASCII.GetString($wmiMonitorID.ProductCodeID)).Replace("$([char]0x0000)",'')			
 	    $dispproduct	
@@ -1626,7 +1635,7 @@ Function MonPCode {
 }
 
 Function MonSn {
-    If ($wmiMonitorID.SerialNumberID -ne $null) {		
+    If ($null -ne $wmiMonitorID.SerialNumberID) {		
         $dispserial = $null
         $dispserial = ([Text.Encoding]::ASCII.GetString($wmiMonitorID.SerialNumberID)).Replace("$([char]0x0000)",'')			
         $dispserial
@@ -1702,7 +1711,7 @@ Function MonitorManuf {
         'ENV'='Envision'      
         'HSD'='Hanns.G'
     }
-    If ($wmiMonitorID.ManufacturerName -ne $null) {
+    If ($null -ne $wmiMonitorID.ManufacturerName) {
         $manuf = $null
         $manuf = ([Text.Encoding]::ASCII.GetString($wmiMonitorID.ManufacturerName)).Replace("$([char]0x0000)",'')			 			
         if ($ManufacturerHashTable["$manuf"]) {
@@ -1774,9 +1783,9 @@ Function NetworkAdapters {
             If ($DeviceId.Length -lt 4) {1..$(4-$DeviceId.Length) | ForEach-Object {[string]$ZerroString += '0'}}
             $Key              = 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}\' + $ZerroString + $DeviceId
             $SpeedDuplexValue = RegGetValue -Key $Key -Value *SpeedDuplex -GetValue GetStringValue -ErrorAction SilentlyContinue     
-            If ($SpeedDuplexValue -ne $null) {$SpeedDuplex = GetSpeedDuplexFromValue -SV $([int]$SpeedDuplexValue)}
+            If ($null -ne $SpeedDuplexValue) {$SpeedDuplex = GetSpeedDuplexFromValue -SV $([int]$SpeedDuplexValue)}
             $AdapterTypeValue = RegGetValue -Key $Key -Value *MediaType -GetValue GetDWORDValue -ErrorAction SilentlyContinue
-            If ($AdapterTypeValue -ne $null) {$AdapterType = GetAdapterTypeFromValue -SV $([int]$AdapterTypeValue)}
+            If ($null -ne $AdapterTypeValue) {$AdapterType = GetAdapterTypeFromValue -SV $([int]$AdapterTypeValue)}
 	        $DriverVersion    = RegGetValue -key $Key -Value DriverVersion -GetValue GetStringValue -ErrorAction SilentlyContinue
         }
         $Status    = GetStatusFromValue -Sv $Adapter.NetConnectionStatus
@@ -1817,11 +1826,11 @@ Function NetworkAdaptersPowMan {
             $Key                    = 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}\' + $ZerroString + $DeviceId
             $WakeOnMagicPacketValue = RegGetValue -Key $Key -Value *WakeOnMagicPacket -GetValue GetStringValue -ErrorAction SilentlyContinue
             $WakeOnPatternValue     = RegGetValue -Key $Key -Value *WakeOnPattern -GetValue GetStringValue -ErrorAction SilentlyContinue
-            If ($WakeOnMagicPacketValue -ne $null -or $WakeOnMagicPacketValue -ne $null) {
-                If ($WakeOnMagicPacketValue -ne $null) {
+            If ($null -ne $WakeOnMagicPacketValue -or $null -ne $WakeOnMagicPacketValue) {
+                If ($null -ne $WakeOnMagicPacketValue) {
                     If([int]$WakeOnMagicPacketValue -eq 1) {$WakeOnMagicPacket = $true} ElseIf ([int]$WakeOnMagicPacketValue -eq 0) {$WakeOnMagicPacket = $false}
                 }
-                If ($WakeOnMagicPacketValue -ne $null) {
+                If ($null -ne $WakeOnMagicPacketValue) {
                     If ([int]$WakeOnPatternValue -eq 1) {$WakeOnPattern = $true} ElseIf ([int]$WakeOnPatternValue -eq 0) {$WakeOnPattern = $false}
                 }
                 Write-Verbose -Message 'CreateObject'
@@ -1919,7 +1928,7 @@ Function MsOfficeInfo {
                 $ChildConfigPath  = $_+'\Common\Config'
                 $OfficeConfigPath = Join-Path -Path $RootOfficeKeylKey -ChildPath $ChildConfigPath  
                 Try {
-                    If ($OfficeConfigPath -ne $null) {
+                    If ($null -ne $OfficeConfigPath) {
                         RegEnumKey -key $OfficeConfigPath -ErrorAction SilentlyContinue | ForEach-Object {
                             $DisplayName             = $null
                             $DisplayVersion          = $null
@@ -2007,7 +2016,7 @@ Function NetFolderShortcuts {
                 $NetworkShortcutsSubFolder = Get-WmiObject -query "ASSOCIATORS OF {Win32_Directory.Name='$NetworkShortcutsLocation'} WHERE AssocClass = Win32_Subdirectory" -Namespace root\cimv2 -ComputerName $Computername -ErrorAction Stop
             }
             $AllNetworkShortcutsUser = @()
-            If ($NetworkShortcutsSubFolder -ne $null) {
+            If ($null -ne $NetworkShortcutsSubFolder) {
                 $NetworkShortcutsSubFolder | ForEach-Object { 
                     $FolderName           = $_.FileName
                     $NetworkShortcutsPath = (Join-Path -Path $_.name -ChildPath 'target.lnk') -replace '\\','\\' 
@@ -2016,9 +2025,9 @@ Function NetFolderShortcuts {
                     } Else {
                         $ShortcutFile = Get-WmiObject  -Query "SELECT * FROM Win32_ShortcutFile WHERE Name='$NetworkShortcutsPath'" -Namespace root\cimv2 -ComputerName $Computername -ErrorAction Stop
                     }
-                    If ($ShortcutFile -ne $null) {
+                    If ($null -ne $ShortcutFile) {
                         $ShortcutFile | ForEach-Object {
-                            If ($_.target -ne $null) {
+                            If ($null -ne $_.target) {
                                 $TmpObject = New-Object -TypeName psobject | Select-Object -Property User,FolderName,Target
                                 $TmpObject.User           = $User
                                 $TmpObject.FolderName     = $FolderName
@@ -2060,7 +2069,7 @@ Function NetMappedDrives {
             $UserName        = $_.user
             $NetDriveKey     = "HKEY_USERS\$($_.sid)\Network"
             $AllNetDrivesKey = RegEnumKey -Key $NetDriveKey -ErrorAction SilentlyContinue
-            If ($AllNetDrivesKey -ne $null) {
+            If ($null -ne $AllNetDrivesKey) {
                 $AllNetDrivesKey | ForEach-Object {
                     $DriverLetter          = $_
                     $DriverLetterRegKey    = Join-Path -Path $NetDriveKey -ChildPath $DriverLetter  
@@ -2131,7 +2140,7 @@ Function OsAdministrators {
         } Else {
             $wmitmp = Get-WmiObject -ComputerName $ComputerName -Query "SELECT * FROM Win32_GroupUser WHERE GroupComponent=`"Win32_Group.Domain='$ComputerName',Name='$GroupName'`"" -ErrorAction Stop
         }
-        If ($wmitmp -ne $null) {
+        If ($null -ne $wmitmp) {
             $DispObjArray=@()       
             If ($Credential) {
                 $LocalUserAccounts = Get-WmiObject -Class Win32_UserAccount -Namespace root\cimv2  -ComputerName $ComputerName -Filter "LocalAccount=$true" -ErrorAction Stop -Credential $Credential
@@ -2213,7 +2222,7 @@ Function OsKernelPowerFailCount {
 Function OsLastUpdated {
     Try {
         $CurrentDate = Get-date
-        If ($Win32_QuickFixEngineering | Where-Object {$_.installedon -ne $null} | Where-Object {$_.installedon.gettype() -eq [datetime]}) {
+        If ($Win32_QuickFixEngineering | Where-Object {$null -ne $_.installedon} | Where-Object {$_.installedon.gettype() -eq [datetime]}) {
             $LastUpdate = ($Win32_QuickFixEngineering | Sort-Object -Property {$_.InstalledOn} -Descending -ErrorAction Stop | Select-Object -First 1 -ErrorAction Stop).InstalledOn
             If ($Protocol -eq 'Wsman') {
                 $Win32_OperatingSystem = Get-WmiObject -Class Win32_OperatingSystem
@@ -2283,7 +2292,7 @@ Function OsSRPSettings {
             $LocalAccount = Get-WmiObject -Class Win32_UserAccount -ComputerName $Computername -Filter "LocalAccount=$true"
         }
         $LoadedProfile        = $Win32_UserProfile |Select-Object -Property * | Where-Object {!($ExcludeSid -eq $_.sid) -and $_.loaded}
-        If ($LoadedProfile -eq $null -and !$ComputerSrpEnable) {
+        If ($null -eq $LoadedProfile -and !$ComputerSrpEnable) {
             Write-Error -Message 'No uploaded user profile' -ErrorAction Stop        
         } ElseIf ($ComputerSrpEnable) {
             $Obj           = '' | Select-Object -Property User,Loaded,SrpEnable
@@ -2305,7 +2314,7 @@ Function OsSRPSettings {
             } Catch {
                 Write-Verbose -Message "$Computername Unknown sid $sid"
                 $User = ($LocalAccount | Where-Object {$_.sid -eq $Sid}).caption
-                if ($User -eq $null) {$User = 'Unknown'}
+                if ($null -eq $User) {$User = 'Unknown'}
             }
             $_ | Add-Member -MemberType NoteProperty -Name User -Value $User
             $_
@@ -2410,7 +2419,7 @@ Function RebootRequired {
 Function TenLatestUpdates {
     Try {
         #$CurrentDate=Get-date
-        If ($Win32_QuickFixEngineering | Where-Object {$_.installedon -ne $null} | Where-Object {$_.installedon.gettype() -eq [datetime]}) {
+        If ($Win32_QuickFixEngineering | Where-Object {$null -ne $_.installedon} | Where-Object {$_.installedon.gettype() -eq [datetime]}) {
             $LastTenUpdate = $Win32_QuickFixEngineering | Sort-Object -Property {$_.InstalledOn} -Descending -ErrorAction Stop | Select-Object -First 10 -ErrorAction Stop        
         } Else {
             $Win32_QuickFixEngineeringDate = $Win32_QuickFixEngineering | ForEach-Object {
@@ -2453,7 +2462,7 @@ Function UserProfileList {
     Try {
         GetUserProfile | ForEach-Object {
             $LocalPath = $_.LocalPath
-            If ($LocalPath -ne $null) {
+            If ($null -ne $LocalPath) {
                 $LastUseTime = $null
                 $ProfilePath = $LocalPath -replace '\\','\\'
                 If ($credential) {
@@ -2461,7 +2470,7 @@ Function UserProfileList {
                 } Else {
                     $ProfileDirectory = Get-WmiObject -Class Win32_Directory -Filter "Name='$ProfilePath'" -ComputerName $Computername -ErrorAction Stop
                 }
-                If ($ProfileDirectory -ne $null) {
+                If ($null -ne $ProfileDirectory) {
                     $LastUseTime = ([wmi]'').ConvertToDateTime($ProfileDirectory.LastModified)
                 }
             }
@@ -2486,7 +2495,7 @@ Function UserProxySettings {
             9  = $true
         }
         $LoadedProfile = $Win32_UserProfile | Select-Object -Property * | Where-Object {!($ExcludeSid -eq $_.sid) -and $_.loaded} 
-        If ($LoadedProfile -eq $null) {Write-Error -Message 'No uploaded user profile' -ErrorAction Stop}
+        If ($null -eq $LoadedProfile) {Write-Error -Message 'No uploaded user profile' -ErrorAction Stop}
         $LoadedProfile | ForEach-Object {
             $Sid              = $_.sid
             $LastUseTime      = $null
@@ -2500,7 +2509,7 @@ Function UserProxySettings {
                 Write-Verbose -Message "$Computername Translate sid $sid succesfully"
             } Catch {
                 Write-Verbose -Message "$Computername Unknown sid $sid"
-                If ($LocalAccount -eq $null) {
+                If ($null -eq $LocalAccount) {
                     If ($credential) {
                         $LocalAccount = Get-WmiObject -Class Win32_UserAccount -ComputerName $Computername -Filter "LocalAccount=$true" -Credential $credential
                     } Else {
@@ -2508,7 +2517,7 @@ Function UserProxySettings {
                     }
                 }
                 $User    = ($LocalAccount | Where-Object {$_.sid -eq $Sid}).caption
-                if ($User -eq $null) {$User = 'Unknown'}
+                if ($null -eq $User) {$User = 'Unknown'}
             }
             $_ | Add-Member -MemberType NoteProperty -Name User -Value $User
             $_
@@ -2520,7 +2529,7 @@ Function UserProxySettings {
             $ProxyOverride = RegGetValue -Key $ISKey               -Value ProxyOverride             -GetValue GetStringValue -ErrorAction SilentlyContinue
             $DefConnectSet = RegGetValue -Key "$ISKey\connections" -Value DefaultConnectionSettings -GetValue GetBinaryValue -ErrorAction SilentlyContinue
             If ($ProxyOverride -match '<Local>') {$BypassForLocal = $True} Else {$BypassForLocal = $False}
-            if ($DefConnectSet -ne $null) {$AutoDetectSettings = $AutoDetectSettingsHash[[int]$($DefConnectSet[8])]}
+            if ($null -ne $DefConnectSet) {$AutoDetectSettings = $AutoDetectSettingsHash[[int]$($DefConnectSet[8])]}
             if ($proxyenable -eq 1) {$proxyenable = $true} else {$proxyenable = $false}
             $_ | Add-Member -MemberType NoteProperty -Name Proxy              -Value $ProxyServer
             $_ | Add-Member -MemberType NoteProperty -Name AutoDetectSettings -Value $AutoDetectSettings
@@ -2654,7 +2663,7 @@ Function SysmonInfo {
             [cmdletbinding()]
             Param ($Data,$FilePath,[validateset('Md5','Sha1','Sha256')][string]$HashAlgorithm='Sha256')
             $ServiceProv = [Security.Cryptography.HashAlgorithm]::Create($HashAlgorithm)
-            If ($PSBoundParameters['Data'] -ne $null) {
+            If ($null -ne $PSBoundParameters['Data']) {
                 If ($Data.GetType() -eq [string]) {
                     $enc   = [Text.Encoding]::UTF8    
                     $Bytes = $enc.GetBytes($Data)
@@ -2666,7 +2675,7 @@ Function SysmonInfo {
                     $Bytes = $Data
                 }
                 $Hash = [BitConverter]::ToString($ServiceProv.ComputeHash($Bytes)) -replace '-',''
-            } ElseIf ($PSBoundParameters['FilePath'] -ne $null) {
+            } ElseIf ($null -ne $PSBoundParameters['FilePath']) {
                 If (Test-Path -Path $FilePath) {$Hash = [BitConverter]::ToString($ServiceProv.ComputeHash([IO.File]::ReadAllBytes($FilePath))) -replace '-',''} else {Write-Error -Message "File $FilePath not exist" -ErrorAction Stop}
             }
             $Hash
@@ -2878,7 +2887,7 @@ Function HddVolumes {
                 }
             }
             $DriveType = $DrTypehash[[int]$($Volume.DriveType)]
-            If ($DriveType -eq $null) {$DriveType = $Volume.DriveType}
+            If ($null -eq $DriveType) {$DriveType = $Volume.DriveType}
             $Psobject = New-Object -TypeName PSObject
             $Psobject | Add-Member -MemberType NoteProperty -Name Drive           -Value $Volume.DriveLetter
             $Psobject | Add-Member -MemberType NoteProperty -Name Label           -Value $Volume.label
@@ -2930,7 +2939,7 @@ Function EternalBlueStatus {
         If ([version]$OsVersion -ge [Version]'10.0.14393') {
             $Status='NotRequired'
         } else {
-            If ($MinimumFileVersion -ne $null) {
+            If ($null -ne $MinimumFileVersion) {
                 If ([version]$SrvSysVer -ge [version]$MinimumFileVersion) {$Status = 'Patched'}
             } Else {
                 Write-Warning -Message "$Computername Unknown OS version. Check OsVerFileVer hashtable"
@@ -2975,9 +2984,9 @@ Function MeltdownSpectreStatus {
         $FeatureSettingsOverrideMask = RegGetValue -key 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management' -Value 'FeatureSettingsOverrideMask' -GetValue GetDWORDValue -ErrorAction SilentlyContinue   
         If ($FeatureSettingsOverride -eq 3) {$HotfixEnabled = $False} ElseIf($FeatureSettingsOverride -eq 0) {$HotfixEnabled = $true}
         If ($Win32_OperatingSystem.ProductType -eq 1) {
-            If ($FeatureSettingsOverride -eq $null -and $FeatureSettingsOverrideMask -eq $null) {$HotfixEnabled = $true}
+            If ($null -eq $FeatureSettingsOverride -and $null -eq $FeatureSettingsOverrideMask) {$HotfixEnabled = $true}
         } Else {
-            If ($FeatureSettingsOverride -eq $null -and $FeatureSettingsOverrideMask -eq $null) {$HotfixEnabled = $False}
+            If ($null -eq $FeatureSettingsOverride -and $null -eq $FeatureSettingsOverrideMask) {$HotfixEnabled = $False}
         }
         if ($Protocol -eq 'Dcom') {
             Write-Warning -Message "$Computername The information received with the help of Dcom protocol may be incorrect. Use the protocol Wsman to determine MeltdownSpectreStatus"
@@ -3280,7 +3289,7 @@ Function Systeminfo {
             Get-Job | Where-Object {$_.state -ne 'Running'} | Remove-Job -Force
             #Collection all Properties
             [string[]]$AllPropertiesSwitch+=$PSCmdlet.MyInvocation.BoundParameters.keys | ForEach-Object {If ($PSCmdlet.MyInvocation.BoundParameters[$_].ispresent -and !($ExcludeParam -eq $_)) {$SwitchConfig[$_]}}
-            If ($AllPropertiesSwitch -eq $Null -and $Properties -eq $null) {$AllPropertiesSwitch = $DefaultInfoConfig}
+            If ($Null -eq $AllPropertiesSwitch -and $null -eq $Properties) {$AllPropertiesSwitch = $DefaultInfoConfig}
             $AllProperties += $AllPropertiesSwitch + $Properties
             $AllProperties  = $AllProperties | Select-Object -Unique
             If ($AllProperties -match '\*') {
@@ -3315,7 +3324,7 @@ Function Systeminfo {
             If ($PSBoundParameters['AppendToResult'].IsPresent) {
                 If (!(Get-Variable -Name Result -Scope Global)) {
                     $Global:Result = @()
-                } ElseIf ((Get-Variable -Name Result -Scope Global -ValueOnly).Count -eq $null) {
+                } ElseIf ($null -eq (Get-Variable -Name Result -Scope Global -ValueOnly).Count) {
                     $OldRes         = $Global:Result
                     $Global:Result  = @()
                     $Global:Result += $OldRes
@@ -3397,7 +3406,7 @@ Function Systeminfo {
         }
         Process {
             $computers = @()
-            If ($Name -ne $null) {$computers += $Name}
+            If ($null -ne $Name) {$computers += $Name}
             $computers | ForEach-Object {
                 $ComputerName = $_
                 $CountComputers++
@@ -3458,7 +3467,7 @@ Function Systeminfo {
                 $State = $PowerShell.BeginInvoke() 
             }
             $Global:ErrorResult = $Global:ErrorResult | Sort-Object -Property Warning
-            If ($Global:ErrorResult -eq $null) {$ErrResCount = 0} ElseIf ($Global:ErrorResult.count -eq $null) {$ErrResCount = 1} Else {$ErrResCount = $Global:ErrorResult.Count}
+            If ($null -eq $Global:ErrorResult) {$ErrResCount = 0} ElseIf ($null -eq $Global:ErrorResult.count) {$ErrResCount = 1} Else {$ErrResCount = $Global:ErrorResult.Count}
             $ResultCount=$Global:Result.Count
             If ($Global:Result.Count -eq 1) {$Global:Result=$Global:Result | ForEach-Object {$_}}
             If ($ExecutionPolicyChanged) {Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy $CurrentExecutionPolicy -Force -Confirm:$false -ErrorAction SilentlyContinue}

@@ -7,25 +7,19 @@ Function Get-SerialScan {
             <#
                 .SYNOPSIS
                 An Open file GUI dialog.
-
                 .DESCRIPTION
                 Open File GUI.
-
                 .PARAMETER WindowTitle
                 Optional: Self-explanatory Window Title.
-
                 .PARAMETER InitialDirectory
                 Optional: Specify directory to start search in.
-
                 .PARAMETER Filter
                 SYNTAX: 'Name of file type (*.ext)|*.ext'
                   ex: 'All files (*.*)|*.*'
                   ex: 'Text Files (*.txt)|*.txt'
                   ex: 'Executable Files (*.exe, *.cmd)|*.exe,*.cmd'
-
                 .PARAMETER AllowMultiSelect
                 Optional: Self-explanatory.
-
                 .EXAMPLE
                 $Params = @{
                     WindowTitle     = "Simple multiple choice"
@@ -41,7 +35,6 @@ Function Get-SerialScan {
                   - Matching File Type       : *.txt
                   - Selecting Multiple Files : Enabled
                 Store chosen files in $temp
-
                 .EXAMPLE
                 Read-OpenFileDialog -WindowTitle 'Browse for file' -InitialDirectory "$env:USERPROFILE\Desktop"
 
@@ -61,17 +54,13 @@ Function Get-SerialScan {
             )
             Add-Type -AssemblyName System.Windows.Forms
             $openFileDialog = New-Object -TypeName System.Windows.Forms.OpenFileDialog
-            $openFileDialog.Title = $WindowTitle
-            If (![string]::IsNullOrWhiteSpace($InitialDirectory)){
-                $openFileDialog.InitialDirectory = $InitialDirectory
-            }
-            $openFileDialog.Filter = $Filter
-            If ($AllowMultiSelect){
-                $openFileDialog.MultiSelect = $true
-            }
+            $openFileDialog.Title    = $WindowTitle
+            If (![string]::IsNullOrWhiteSpace($InitialDirectory)) {$openFileDialog.InitialDirectory = $InitialDirectory}
+            $openFileDialog.Filter   = $Filter
+            If ($AllowMultiSelect) {$openFileDialog.MultiSelect = $true}
             $openFileDialog.ShowHelp = $true
             $openFileDialog.ShowDialog() > $null
-            If ($AllowMultiSelect){
+            If ($AllowMultiSelect) {
                 Return $openFileDialog#.Filenames
             } else {
                 Return $openFileDialog#.Filename
@@ -85,7 +74,7 @@ Function Get-SerialScan {
         }
         $computerList      = Read-OpenFileDialog @fileParams
         $list_of_computers = (Get-Content -Path $computerList.Filename).Split()
-        If ($list_of_computers.Count -lt 1){Break}
+        If ($list_of_computers.Count -lt 1) {Break}
         #endregion Computerlist File        
         
         ### Variables
@@ -98,7 +87,7 @@ Function Get-SerialScan {
         Set-Content -Path $OutputFile -Value 'Computer Name, Serial'
         
         #region Progress Meter
-        $pi = 0
+        $pi       = 0
         $Progress = @{
             Activity         = 'Working through Computers . . .'
             CurrentOperation = 'Loading'
@@ -165,8 +154,8 @@ Function Get-SerialScan {
 
                 ### PC Serial Number
                 $computerSerial = (Get-WmiObject -ComputerName $comp -Class Win32_Bios -ErrorAction SilentlyContinue).SerialNumber
-                If ($computerSerial -match 'VMware')   {$computerSerial = 'VMware'}
-                If ($computerSerial -notmatch 'VMware'){
+                If ($computerSerial -match 'VMware')    {$computerSerial = 'VMware'}
+                If ($computerSerial -notmatch 'VMware') {
                     ### Get Monitor WMI Objects
                     $monitorWmi     = Get-WmiObject -ComputerName $comp -Class WMIMonitorID -Namespace 'root\wmi' -ErrorAction SilentlyContinue
                     $monitorSerials = @()
@@ -181,18 +170,20 @@ Function Get-SerialScan {
                         $MonInst             = $_.InstanceName.split('\')[-1]
                         
                         ### $MonInfHold will fetch and store computername, monitor instance id, horizontal size, vertical size, do the match for overall size, and aspect ratio
-                        $MonInfHold          = Get-WmiObject -ComputerName $tempCompName -Namespace root\wmi -Class WmiMonitorBasicDisplayParams | 
-                                               Select-Object -Property @{N='Computer';E={$_.__SERVER}},
-                                                                       InstanceName,
-                                                                       @{N='Horizontal';E={[Math]::Round(($_.MaxHorizontalImageSize/2.54), 2)}},
-                                                                       @{N='Vertical';E={[Math]::Round(($_.MaxVerticalImageSize/2.54), 2)}},
-                                                                       @{N='Size';E={[Math]::Round(([Math]::Sqrt([Math]::Pow($_.MaxHorizontalImageSize, 2) + [Math]::Pow($_.MaxVerticalImageSize, 2))/2.54),2)}},
-                                                                       @{N='Ratio';E={[Math]::Round(($_.MaxHorizontalImageSize)/($_.MaxVerticalImageSize),2)}}
+                        $monInfoSel = @{
+                            Property = @{N='Computer';E={$_.__SERVER}},
+                                       'InstanceName',
+                                       @{N='Horizontal';E={[Math]::Round(($_.MaxHorizontalImageSize/2.54), 2)}},
+                                       @{N='Vertical';E={[Math]::Round(($_.MaxVerticalImageSize/2.54), 2)}},
+                                       @{N='Size';E={[Math]::Round(([Math]::Sqrt([Math]::Pow($_.MaxHorizontalImageSize, 2) + [Math]::Pow($_.MaxVerticalImageSize, 2))/2.54),2)}},
+                                       @{N='Ratio';E={[Math]::Round(($_.MaxHorizontalImageSize)/($_.MaxVerticalImageSize),2)}}
+                        }
+                        $MonInfHold          = Get-WmiObject -ComputerName $tempCompName -Namespace root\wmi -Class WmiMonitorBasicDisplayParams | Select-Object @monInfoSel 
                         $MonSize             = $MonInfHold | Where-Object {$_.InstanceName.split('\')[-1] -match $MonInst} | Select-Object -ExpandProperty Size
                         $monitorSerials     += "$Man,$Nam,$Ser,$MonSize inch"
                         $monitorSerialOutput = '{' + $($monitorSerials -join ' / ') + '}' # Convert $monitor serials to string
                     }
-                } else {
+                } Else {
                     $monitorSerialOutput = '{NA}'
                 }
                 ### Add the details to our $tempObj
@@ -201,7 +192,7 @@ Function Get-SerialScan {
                 $tempObj | Add-Member -MemberType NoteProperty -Name 'ComputerSerialNumber' -Value $computerSerial
                 $tempObj | Add-Member -MemberType NoteProperty -Name 'MonitorSerialNumbers' -Value $monitorSerialOutput
                 $tempObj | Add-Member -MemberType NoteProperty -Name 'Status'               -Value 'ONLINE'
-            } else {
+            } Else {
                 ### If the computer is off, set the status property to offline so we can easily sort and filter them
                 $tempObj | Add-Member -MemberType NoteProperty -Name 'Status'               -Value 'UNREACHABLE'
             }
@@ -210,13 +201,8 @@ Function Get-SerialScan {
     }
     End {
         $computerlist = $computerList | 
-                        Select-Object -Property ComputerName,
-                                                CompManufacturer,
-                                                ComputerModel,
-                                                ComputerSerialNumber,
-                                                MonitorSerialNumbers,
-                                                Status | 
-        Sort-Object -Property Status,ComputerName
+                        Select-Object -Property ComputerName, CompManufacturer, ComputerModel, ComputerSerialNumber, MonitorSerialNumbers, Status | 
+                        Sort-Object -Property Status,ComputerName
         
         #Return $computerlist
         $computerlist | Export-CSV -Path $OutputFile -NoTypeInformation -Delimiter ',' -Encoding UTF8
