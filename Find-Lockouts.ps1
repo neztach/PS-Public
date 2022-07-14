@@ -1,97 +1,107 @@
 Function Find-Lockouts {
     <#
-            .SYNOPSIS
-            Find all users that are locked out
-            .DESCRIPTION
-            Finds all users that are locked out
-            .PARAMETER Unlock
-            Unlock all those locked out
-            .EXAMPLE
-            Find-Lockouts -Unlock
+        .SYNOPSIS
+        Find all users that are locked out
+        .DESCRIPTION
+        Finds all users that are locked out
+        .PARAMETER Unlock
+        Unlock all those locked out
+        .EXAMPLE
+        Find-Lockouts -Unlock
 
-            Unlocks all locked users
-            .EXAMPLE
-            Unlocker
+        Unlocks all locked users
+        .EXAMPLE
+        Unlocker
 
-            menu to unlock users
+        Gridview type of Menu to unlock users
+        .EXAMPLE
+        WhosLocked
+
+        Output a list of accounts that are locked out and stop.
     #>
-    [CmdletBinding()][Alias('Unlocker')]Param([switch]$Unlock)
-    $GRN = 'Green'
-    Add-Type -AssemblyName PresentationFramework
-    $LockedOutUsers = Search-ADAccount -LockedOut
-    If ($Unlock -OR ($MyInvocation.InvocationName -eq 'Unlocker')){
-        If ($LockedOutUsers){
-            ### Function to test for a specific account lockout (verify)
-            Function Get-UserLockedOut {
-                <#
-                        .SYNOPSIS
-                        Find lockout status of a specific user
-                        .DESCRIPTION
-                        Finds current lockout status of a specific user by samaccountname
-                        .PARAMETER CheckUser
-                        The user to check if locked out.
-                        .EXAMPLE
-                        Get-UserLockedOut testuser
-                #>
-                Param ([Parameter(Mandatory=$true,HelpMessage='Username required')]$CheckUser)
-                $lockstatus = Get-ADUser -Identity $CheckUser -Properties LockedOut | Select-Object -Property Name,@{n='Username';e={$_.SamAccountName}},LockedOut
-                $lockstatus = $lockstatus | Select-Object -Property Username,Name,LockedOut
-                Return $lockstatus
-            }
+    [CmdletBinding()] 
+    [Alias('Unlocker')]
+    [Alias('WhosLocked')]
+    Param([switch]$Unlock)
+    
+    Begin {
+        Add-Type -AssemblyName PresentationFramework
 
-            ### 1. Get list of lockouts
-            $StepOne = Search-ADAccount -LockedOut | Select-Object -Property Name,@{n='Username';e={$_.SamAccountName}} | Sort-Object -Property Name
+        ### Domain PDC Emulator
+        $PDC = Get-AdDomainController -Filter {OperationMasterRoles -like '*PDCEmulator*'} | Select-Object -ExpandProperty HostName
 
-            ### 2. Put up menu (gridview) of locked accounts or tell user none were found
-            $StepTwo = If ($StepOne) {
-                #SINGLE $StepOne | Select-Object -Property Username,Name | Out-GridView -Title "User unlocker $(Get-Date)" -OutputMode Single
-                $StepOne | Select-Object -Property Username,Name | Out-GridView -Title "User unlocker $(Get-Date)" -Passthru
-            } Else {
-                [Windows.MessageBox]::Show('No locked out users found')
-            }
+        ### Get current Locked Out users (optional: add -Server $PDC to send the query to your PDC)
+        $LockedOutUsers = Search-ADAccount -LockedOut
 
-            ### 3. Check if a username was selected, and if-so unlock
-            If ($StepTwo.Username){
-                ### MULTIPLE
-                ForEach ($lockedUser in $StepTwo){
-                    #If ($lockedUser.Username){
-                    #SINGLE $lockeduser = $StepTwo.Username
-                    $lockedusername = $lockedUser.Username
-                    $unlocks       += $lockedusername
-                    #SINGLE Get-ADUser $lockeduser | Unlock-ADAccount
-                    Get-ADUser -Identity $lockedusername | Unlock-ADAccount
-                }
-            } Else {
-                Write-Host 'No user selected' -ForegroundColor Yellow
-            }
-
-            ### 4. Verify account was unlocked
-            ### MULTIPLE
-            ForEach ($verification in $unlocks){
-                #SINGLE If ($StepTwo.Username){
-                $v = Get-UserLockedOut -Checkuser $verification
-                If ($v.Lockedout -eq $false){
-                    #SINGLE Write-Host "Unlocked: $($lockeduser.name)" -ForegroundColor Green
-                    Write-Host ('Unlocked: {0}' -f $v.name) -ForegroundColor $GRN
-                    Return
-                } Else {
-                    #SINGLE Write-Host "Unable to unlock $($lockeduser.name)" -ForegroundColor Red
-                    Write-Host ('Unable to unlock {0}' -f $v.name) -ForegroundColor Red
-                    #SINGLE $lockedUser.DistinguishedName
-                    $v.DistinguishedName
-                    Return
-                }
-            }
-            $LockedOutUsers | Select-object -Property SamAccountName,Name
-        } Else {
-            Write-Host 'Checked for user lockouts - none found.' -ForegroundColor $GRN
-        }
-    } Else {
-        If ($LockedOutUsers){
-            $LockedOutUsers | Select-Object -Property SamAccountName,Name
-        } Else {
-            Write-Host 'No locked out users to report' -ForegroundColor $GRN
+        ### Function to test for a specific account lockout (verify)
+        Function Get-UserLockedOut {
+            <#
+                    .SYNOPSIS
+                    Find lockout status of a specific user
+                    .DESCRIPTION
+                    Finds current lockout status of a specific user by samaccountname
+                    .PARAMETER CheckUser
+                    The user to check if locked out.
+                    .EXAMPLE
+                    Get-UserLockedOut testuser
+            #>
+            Param (
+                [Parameter(Mandatory=$true,HelpMessage='Username required')]$CheckUser
+            )
+            $SelParam   = @{Property = 'SamAccountName', 'Name', 'LockedOut'}
+            $lockstatus = Get-ADUser -Identity $CheckUser -Properties LockedOut | Select-Object @SelParam
+            $lockstatus = $lockstatus | Select-Object @SelParam
+            Return $lockstatus
         }
     }
-} ### DOMAIN - USER
-New-Alias -Name WhosLocked -Value Find-Lockouts
+    Process {
+        ### If the function is called by the alias 'Unlocker' we assume you want to not only check
+        ### but also intend to unlock one or more users.
+        If ($Unlock -OR ($MyInvocation.InvocationName -eq 'Unlocker')){
+            If ($LockedOutUsers){
+                ### 1. Get list of lockouts (Optional: add the $PDC as the server target)
+                $StepOne = Search-ADAccount -LockedOut | Select-Object -Property Name, SamAccountName | Sort-Object -Property Name
+
+                ### 2. Put up menu (gridview) of locked accounts or tell user none were found
+                $StepTwo = If ($StepOne){
+                               $StepOne | Select-Object -Property Username, Name | Out-GridView -Title "User unlocker $(Get-Date)" -Passthru
+                           } Else {
+                               [Windows.MessageBox]::Show('No locked out users found')
+                           }
+
+                ### 3. Check if a username was selected, and if-so unlock
+                If ($StepTwo.Username){
+                    ForEach ($lockedUser in $StepTwo){
+                        $lockedusername = $lockedUser.Username
+                        $unlocks       += $lockedusername
+                        Get-ADUser -Identity $lockedusername -Server $PDC | Unlock-ADAccount
+                    }
+                } Else {
+                    Write-Warning -Message 'No user selected'
+                }
+
+                ### 4. Verify account was unlocked
+                ForEach ($verification in $unlocks){
+                    $v = Get-UserLockedOut -Checkuser $verification -Server $PDC
+                    If ($v.Lockedout -eq $false){
+                        Write-Output -InputObject ('Unlocked: {0}' -f $v.name)
+                        Return
+                    } Else {
+                        Write-Error -Exception ('Unable to unlock {0}' -f $v.name)
+                        $v.DistinguishedName
+                        Return
+                    }
+                }
+                $LockedOutUsers | Select-Object -Property SamAccountName, Name
+            } Else {
+                Write-Output -InputObject 'Checked for user lockouts - none found.'
+            }
+        } Else {
+            If ($LockedOutUsers){
+                $LockedOutUsers | Select-Object -Property SamAccountName, Name
+            } Else {
+                Write-Output -InputObject 'No locked out users to report'
+            }
+        }
+    }
+}
