@@ -9,26 +9,20 @@ function Get-DNSIssues {
     #>
     #Requires -Modules dnsserver
     ### Get PDC to use as DNS server to query
-    $d = '.'
-    $PDC    = ([DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()).DomainControllers | 
-              Select-Object -Property Forest,@{n='Name';e={$_.Name.Split('.')[0]}},Roles | 
-              Where-Object {$_.Roles -contains 'pdc'} | 
-              Select-Object -ExpandProperty Name
+    $PDC    = ([DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()).DomainControllers | Select-Object -Property Forest,@{n='Name';e={$_.Name.Split('.')[0]}},Roles | Where-Object {$_.Roles -contains 'pdc'} | Select-Object -ExpandProperty Name
     $DNSErr = @()
-    $pi     = 0
+    $pi     = 0 ### Progress Bar
     # Get Reverse Lookup Zones
-    $PTRLookupZones = Get-DnsServerZone -ComputerName $PDC | 
-                      Where-Object IsReverseLookupZone -eq $True | 
-                      Where-Object IsAutoCreated -eq $False | 
-                      Where-Object ZoneName -notlike '*ip6*'
+    $PTRLookupZones = Get-DnsServerZone -ComputerName $PDC | Where-Object IsReverseLookupZone -eq $True | Where-Object IsAutoCreated -eq $False | Where-Object ZoneName -notlike '*ip6*'
 
+    ### Progress Bar
     $Progress = @{
         Activity         = 'Working through records . . .'
         CurrentOperation = 'Loading'
         PercentComplete  = 0
     }
 
-    foreach ($PTRLookupZone in $PTRLookupZones) {
+    ForEach ($PTRLookupZone in $PTRLookupZones) {
         $SVRS = $null
 
         # Get Zone Information
@@ -36,34 +30,33 @@ function Get-DNSIssues {
 
         # Get IP Information
         $PTRIP       = $PTRLookupZone.ZoneName.TrimEnd('.in-addr.arpa')
-        $PTRIPSuffix = $PTRIP.Split($d)
+        $PTRIPSuffix = $PTRIP.Split('.')
         [array]::reverse($PTRIPSuffix)
-        $PTRIPSuffix = $PTRIPSuffix -join $d
+        $PTRIPSuffix = $PTRIPSuffix -join '.'
 
         # Get Servers
         $SVRS = Get-DnsServerResourceRecord -ZoneName $DNSZoneName -ComputerName $PDC | Where-Object HostName -ne '@'
-        foreach ($SVR in $SVRS) {
-
+        ForEach ($SVR in $SVRS) {
             # Get Server IP Address
             $SVRHostName  = $SVR.HostName
-            $SVRIPSuffix  = $SVRHostName.Split($d)
+            $SVRIPSuffix  = $SVRHostName.Split('.')
             [array]::reverse($SVRIPSuffix)
-            $SVRIPSuffix  = $SVRIPSuffix -join $d
-            $SVRIP = $PTRIPSuffix + $d + $SVRIPSuffix
+            $SVRIPSuffix  = $SVRIPSuffix -join '.'
+            $SVRIP = $PTRIPSuffix + '.' + $SVRIPSuffix
             
             # Get Server DNS Hostname
             $SVRDNSName   = $SVR.RecordData.PtrDomainName
-            $SVRDNSName   = $SVRDNSName.TrimEnd($d)
+            $SVRDNSName   = $SVRDNSName.TrimEnd('.')
             $pi++
             
-            [int]$percentage           = ($pi / $SVRS.Count)*100  
+            ### Progress Bar
+            [int]$percentage           = ($pi / $SVRS.Count) * 100
             $Progress.CurrentOperation = "$pi of $($SVRS.Count) - $SVRDNSName"
             $Progress.PercentComplete  = $percentage
-            
             Write-Progress @Progress
 
             # Get Server DNS Subnet
-            $SVRDNSSubnet = $SVRIP.Split($d)[0] + $d + $SVRIP.Split($d)[1] + $d + $SVRIP.Split($d)[2] + '.0/24'
+            $SVRDNSSubnet = $SVRIP.Split('.')[0] + '.' + $SVRIP.Split('.')[1] + '.' + $SVRIP.Split('.')[2] + '.0/24'
 
             # Resolve DNS Name
             Try {
@@ -71,21 +64,15 @@ function Get-DNSIssues {
             } Catch {
                 Write-Host ("FWD Record not found for $SVRDNSName of PTR Record $SVRIP") -ForegroundColor Red
             }
-            if ($DNSName) {
+            If ($DNSName) {
                 $Control = 0
-                foreach ($DNSRecord in $DNSName) {
+                ForEach ($DNSRecord in $DNSName) {
                     # Get Reverse DNS Name
                     $DNSIP = $DNSRecord.IPAddress
-                    If (Test-Connection -ComputerName $DNSIP -Count 1 -Quiet){
-                        $alive = 'Alive'
-                    } else {
-                        $alive = 'Dead'
-                    }
-                    if ($DNSIP -eq $SVRIP){
-                        $Control = 1
-                    }
+                    If (Test-Connection -ComputerName $DNSIP -Count 1 -Quiet){$alive = $true} Else {$alive = $false}
+                    If ($DNSIP -eq $SVRIP){$Control = 1}
                 }
-                if ($Control -eq '0') {
+                If ($Control -eq '0') {
                     $DNSErr += New-Object -TypeName PSObject -Property ([ordered]@{
                         'Subnet'      = $SVRDNSSubnet
                         'DNSName'     = $SVRDNSName
@@ -94,7 +81,7 @@ function Get-DNSIssues {
                         'PTR'         = $SVRIP
                         'Alive'       = $alive
                     })
-                } elseif ($alive -eq 'False'){
+                } ElseIf ($alive -eq $false){
                     $DNSErr += New-Object -TypeName PSObject -Property ([ordered]@{
                         'Subnet'      = $SVRDNSSubnet
                         'DNSName'     = $SVRDNSName
