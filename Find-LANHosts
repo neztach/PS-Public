@@ -1,4 +1,4 @@
-function Find-LANHosts {
+Function Find-LANHosts {
     #https://old.reddit.com/r/PowerShell/comments/goiz3b/fast_lan_scanner_finds_hosts_on_a_24_in_under_a/
     [Cmdletbinding()]
     Param (
@@ -6,9 +6,9 @@ function Find-LANHosts {
         [Parameter(Mandatory=$false, Position=2)][ValidateRange(0,15000)][int]$DelayMS = 2,
         [ValidateScript({
             $IsAdmin = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-            if ($IsAdmin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+            If ($IsAdmin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
                 $True
-            } else {
+            } Else {
                 Throw "Must be running an elevated prompt to use ClearARPCache"
             }
         })]
@@ -19,13 +19,13 @@ function Find-LANHosts {
     $Bytes         = $ASCIIEncoding.GetBytes("a")
     $UDP           = New-Object System.Net.Sockets.Udpclient
 
-    if ($ClearARPCache) {arp -d}
+    If ($ClearARPCache) {arp -d}
     $Timer = [System.Diagnostics.Stopwatch]::StartNew()
 
     $IP | ForEach-Object {
         $UDP.Connect($_,1)
         [void]$UDP.Send($Bytes,$Bytes.length)
-        if ($DelayMS) {
+        If ($DelayMS) {
             [System.Threading.Thread]::Sleep($DelayMS)
         }
     }
@@ -33,15 +33,14 @@ function Find-LANHosts {
     $Hosts = arp -a
 
     $Timer.Stop()
-    if ($Timer.Elapsed.TotalSeconds -gt 15) {
+    If ($Timer.Elapsed.TotalSeconds -gt 15) {
         Write-Warning "Scan took longer than 15 seconds, ARP entries may have been flushed. Recommend lowering DelayMS parameter"
     }
 
     $Hosts = $Hosts | 
              Where-Object {$_ -match "dynamic"} | 
              ForEach-Object {
-                 ($_.trim() -replace " {1,}",",") | 
-                 ConvertFrom-Csv -Header "IP","MACAddress"
+                 ($_.trim() -replace " {1,}",",") | ConvertFrom-Csv -Header "IP","MACAddress"
              }
     $Hosts = $Hosts | Where-Object {$_.IP -in $IP}
 
@@ -51,4 +50,4 @@ function Find-LANHosts {
 #Find-LANHosts -ip @((1..255|%{"192.168.0.$_"})+(0..254|%{"192.168.1.$_"})) -OutVariable lanresults
 #$results = Find-LANHosts -ip @(1..255|%{"192.168.2.$_"}) -OutVariable lanresults
 #$results | Select IP,@{n='MACAddress';e={$_.MACAddress.replace('-',':').toUpper()}}
-Find-LANHosts -ip @(1..255|%{"192.168.2.$_"}) -OutVariable lanresults | Select IP,@{n='MACAddress';e={$_.MACAddress.replace('-',':').toUpper()}}
+#Find-LANHosts -ip @(1..255|%{"192.168.2.$_"}) -OutVariable lanresults | Select IP,@{n='MACAddress';e={$_.MACAddress.replace('-',':').toUpper()}}
