@@ -155,7 +155,7 @@ Begin {
             '' # Write-Host "   - variable '$variable' will be: $value" -ForegroundColor Gray
         }
         If ($value) {
-            # replace whitespaces so as quotes
+            # replace whitespace so as quotes
             $value = $value -replace '^\s*|\s*$' -replace "^[`"']*|[`"']*$"
             $setupVariable.$variable = $value
             New-Variable -Name $variable -Value $value -Scope script -Force -Confirm:$false
@@ -167,7 +167,7 @@ Begin {
     }
 
     Function Step-saveInput {
-        # call after each successfuly ended section, so just correct inputs will be stored
+        # call after each successfully ended section, so just correct inputs will be stored
         If (Test-Path -Path $iniFile -ErrorAction SilentlyContinue) {Remove-Item -Path $iniFile -Force -Confirm:$false}
         $setupVariable.GetEnumerator() | 
         ForEach-Object {
@@ -327,8 +327,10 @@ Begin {
     Function Step-installGIT {
         $iPath1 = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
         $iPath2 = 'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
-        $installedGITVersion = ((Get-ItemProperty -Path $iPath1) + (Get-ItemProperty -Path $iPath2) | Where-Object {$_.DisplayName -and $_.Displayname.Contains('Git version')}) | 
-                               Select-Object -ExpandProperty DisplayVersion
+        $installedGITVersion = (
+            (Get-ItemProperty -Path $iPath1) + (Get-ItemProperty -Path $iPath2) | 
+            Where-Object {$_.DisplayName -and $_.Displayname.Contains('Git version')}
+        ) | Select-Object -ExpandProperty DisplayVersion
 
         If (!$installedGITVersion -or $installedGITVersion -as [version] -lt '2.27.0') {
             # Get latest download url for git-for-windows 64-bit exe
@@ -479,7 +481,7 @@ Export-Clixml -inputObject `$credential -Path $xmlPath -Encoding UTF8 -Force -Er
             $bytes         = [System.Text.Encoding]::Unicode.GetBytes($command)
             $encodedString = [Convert]::ToBase64String($bytes)
 
-            #TODO idealne pomoci schtasks aby bylo univerzalnejsi
+            #TODO ~(ideal to help schtasks to be more universal)
             $A        = New-ScheduledTaskAction -Argument "-ExecutionPolicy Bypass -NoProfile -EncodedCommand $encodedString" -Execute "$PSHome\powershell.exe"
             If ($runAs -match '\$') {
                 # under gMSA account
@@ -576,7 +578,7 @@ Process {
                 Write-Host '        - Sets up your repository: (Activate custom git hooks / Set git user name and email).'
                 Write-Host '        - Commit & Push new content of your repository.'
                 Write-Host '        - Sets up MGM server: (Copies the Repo_sync folder / Creates Repo_sync scheduled task / Exports repo_puller credentials).'
-                Write-Host '        - Copies exported credentials from MGM to local repository, Commmit and Push it.'
+                Write-Host '        - Copies exported credentials from MGM to local repository, Commit and Push it.'
                 Write-Host "        - Creates a GPO '" -NoNewLine;Write-Host $GPOname -NoNewLine -ForegroundColor Cyan;Write-Host "' that will be used for connecting clients to this solution:"
                 Write-Host '            - NOTE: Linking GPO has to be done manually.' -ForegroundColor Yellow
                 Write-Host '    - NOTE: Every step has to be explicitly confirmed.' -ForegroundColor Red
@@ -589,12 +591,12 @@ Process {
                 Write-Host "####################################`n#   BEFORE YOU CONTINUE`n####################################" -ForegroundColor Magenta
                 Write-Host '- Create cloud or locally hosted GIT !private! repository (tested with Azure DevOps but probably will work also with GitHub etc).'
                 Write-Host '   - Create READ only account in that repository (repo_puller).'
-                Write-Host '       - Create credentials for this account, that can be used in unnatended way (i.e. alternate credentials in Azure DevOps).'
+                Write-Host '       - Create credentials for this account, that can be used in unattended way (i.e. alternate credentials in Azure DevOps).'
                 Write-Host "   - Install the newest version of 'Git' and 'Git Credential Manager for Windows' and clone your repository locally."
                 Write-Host "        - Using 'git clone' command under account, that has write permission to the repository i.e. yours."
                 Write-Host '   - NOTE:' -ForegroundColor Yellow
                 Write-Host "        - It is highly recommended to use 'Visual Studio Code (VSC)' editor to work with the repository content because it provides:"
-                Write-Host '            - Uunified admin experience through repository VSC workspace settings.'
+                Write-Host '            - Unified admin experience through repository VSC workspace settings.'
                 Write-Host '            - Integration & control of GIT.'
                 Write-Host '            - Auto-Formatting of the code, etc..'
                 Write-Host '        - More details can be found at https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md'
@@ -711,7 +713,7 @@ Process {
         Set-ExecutionPolicy -ExecutionPolicy Bypass -Force
     }
 
-    # TODO nekam napsat ze je potreba psremoting
+    # TODO ~(somewhere to write that it is needed) psremoting
 
     If (!$testInstallation) {Clear-Host} Else {''}
     If (!$noEnvModification -and !$testInstallation) {
@@ -958,7 +960,7 @@ Process {
                     While ($isDFS -notmatch '^[Y|N]$') {$isDFS = Read-Host -Prompt "`n   - Is '$repositoryShare' DFS share? (Y|N)"}
                 }
                 If ($isDFS -eq 'Y') {
-                    #TODO pridat podporu pro tvorbu DFS share
+                    #TODO ~(add support for creating a DFS share)
                     Write-Warning -Message "Skipped! Currently this installer doesn't support creation of DFS share.`nMake share manually with ONLY following permissions:$permissions"
                 } Else {
                     # creation of non-DFS shared folder
@@ -1123,7 +1125,7 @@ Process {
                 (Get-Content -Path $_.fullname) -replace $name, $value | Set-Content -Path $_.fullname
             }
 
-            #TODO zkontrolovat/upozornit na soubory kde jsou replaceme (exclude takovych kde nezadal uzivatel zadnou hodnotu)
+            #TODO ~(check/warn on files where there are replacements (exclude those where the user did not enter a previous value))
         }
         #endregion customize cloned data
 
@@ -1220,7 +1222,7 @@ Process {
             $null = Step-startProcess -filePath git -argumentList 'config core.autocrlf false' -outputErr2Std -dontWait
         
             # commit without using hooks, to avoid possible problem with checks (because of wrong encoding, missing PSScriptAnalyzer etc), that could stop it 
-            Write-Host "   - commiting & pushing changes to repository $repositoryURL"
+            Write-Host "   - committing & pushing changes to repository $repositoryURL"
             $null = git add .
             $null = Step-startProcess -filePath git -argumentList 'commit --no-verify -m initial' -outputErr2Std -dontWait
             $null = Step-startProcess -filePath git -argumentList 'push --no-verify' -outputErr2Std
@@ -1327,7 +1329,7 @@ Process {
                 Write-Host "   - starting scheduled task '$taskName' to fill $repositoryShare immediately"
                 Step-startSchedTask -taskName $taskName
 
-                Write-Host '      - checking, that the task ends up succesfully'
+                Write-Host '      - checking, that the task ends up successfully'
                 While (($result = ((& "$env:windir\system32\schtasks.exe" /query /tn "$taskName" /v /fo csv /nh) -split ',')[6]) -eq '"267009"') {
                     # task is running
                     Start-Sleep -Seconds 1
