@@ -5,7 +5,7 @@ Function birthday2 {
     )
     $TempDate    = $date.split('/')
     $CurrentDate = Get-Date -Date (Get-Date).Date
-    $StartDate   = (Get-Date -Month $TempDate[1] -Day $TempDate[0] -Year $TempDate[2])
+    $StartDate   = (Get-Date -Month $TempDate[0] -Day $TempDate[1] -Year $TempDate[2])
     $DateDiff    = $CurrentDate - $StartDate
 
     $Years = $Months = $Days = 0
