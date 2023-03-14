@@ -81,5 +81,5 @@ Function birthday2 {
     }
 }
 
-$s1 = Read-Host -Prompt "Enter your birth date (dd/MM/yyyy)"
+$s1 = Read-Host -Prompt "Enter your birth date (MM/dd/yyyy)"
 birthday2 $s1 -gui
