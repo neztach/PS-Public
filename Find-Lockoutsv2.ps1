@@ -46,9 +46,6 @@ Function Find-Lockouts {
     $Sel2   = $UN, $NA
     $Sel3   = 'SamAccountName', $NA
     
-    ### Run Commands
-    $Action = {Search-ADAccount -LockedOut}
-    
     ### Functions
     Function Get-UserLockedOut {
         <#
@@ -86,11 +83,11 @@ Function Find-Lockouts {
     }
     #endregion Variables
 
-    $LockedOutUsers = & $Action
+    $LockedOutUsers = Search-ADAccount -LockedOut
     If ($Unlock -OR ($MyInvocation.InvocationName -eq 'Unlocker')) {
         If ($LockedOutUsers) {
             ### 1. Get list of lockouts
-            $StepOne = & $Action | Select-Object -Property $script:Sel1 | Sort-Object -Property $NA
+            $StepOne = Search-ADAccount -LockedOut | Select-Object -Property $script:Sel1 | Sort-Object -Property $NA
 
             ### 2. Put up menu (gridview) of locked accounts or tell user none were found
             $StepTwo = If ($StepOne) {
@@ -130,7 +127,7 @@ Function Find-Lockouts {
     } ElseIf (($MyInvocation.InvocationName -eq 'UnlockAll') -OR ($MyInvocation.InvocationName -eq 'zx')) {
         ### If called with UnlockAll or zx - Get all locked accounts and unlock
         If ($LockedOutUsers) {
-            & $Action | Unlock-ADAccount
+            Search-ADAccount -LockedOut | Unlock-ADAccount
             Write-Host (Get-Date)
             $LockedOutUsers | Select-Object -Property $Sel3
         } Else {
