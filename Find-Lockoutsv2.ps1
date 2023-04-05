@@ -35,16 +35,14 @@ Function Find-Lockouts {
     $Gr     = @{ForegroundColor = $G}
     
     ### Strings
-    $UN     = 'Username'
-    $NA     = 'Name'
     $msg1   = 'Checked for user lockouts - none found.'
     $msg2   = 'No user selected'
     $msg3   = "User unlocker $(Get-Date)"
     
     ### Selections
-    $Sel1   = $NA, @{n=$UN;e={$_.SamAccountName}}
-    $Sel2   = $UN, $NA
-    $Sel3   = 'SamAccountName', $NA
+    $Sel1   = 'Name', @{n='Username';e={$_.SamAccountName}}
+    $Sel2   = 'Username', 'Name'
+    $Sel3   = 'SamAccountName', 'Name'
     
     ### Functions
     Function Get-UserLockedOut {
@@ -87,7 +85,7 @@ Function Find-Lockouts {
     If ($Unlock -OR ($MyInvocation.InvocationName -eq 'Unlocker')) {
         If ($LockedOutUsers) {
             ### 1. Get list of lockouts
-            $StepOne = Search-ADAccount -LockedOut | Select-Object -Property $script:Sel1 | Sort-Object -Property $NA
+            $StepOne = Search-ADAccount -LockedOut | Select-Object -Property $script:Sel1 | Sort-Object -Property Name
 
             ### 2. Put up menu (gridview) of locked accounts or tell user none were found
             $StepTwo = If ($StepOne) {
@@ -99,7 +97,7 @@ Function Find-Lockouts {
             ### 3. Check if a username was selected, and if-so unlock
             If ($StepTwo.Username) {
                 ForEach ($lockedUser in $StepTwo){
-                    $lockedusername = $lockedUser.$UN
+                    $lockedusername = $lockedUser.'Username'
                     $unlocks       += $lockedusername
 
                     Get-ADUser -Identity $lockedusername | Unlock-ADAccount
