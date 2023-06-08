@@ -1,16 +1,20 @@
+#Requires -Module ActiveDirectory
 
 Function Find-ADConnectServer {
+    <#
+        .SYNOPSIS
+        Self explanatory.
+    #>
     [alias('Find-ADSyncServer')]
     Param( )
-    $Description = (
-        Get-ADUser -Filter {Name -like "MSOL*"} -Properties Description | 
-        Select-Object Description
-    ).Description
+    $Description = Get-ADUser -Filter {Name -like 'MSOL*'} -Properties Description | 
+                   Select-Object -ExpandProperty Description
+
     ForEach ($Desc in $Description) {
-        $PatternType           = "(?<=(Account created by ))(.*)(?=(with installation identifier))"
-        $PatternServerName     = "(?<=(on computer ))(.*)(?=(configured))"
-        $PatternTenantName     = "(?<=(to tenant ))(.*)(?=(. This))"
-        $PatternInstallationID = "(?<=(installation identifier ))(.*)(?=( running on ))"
+        $PatternType           = '(?<=(Account created by ))(.*)(?=(with installation identifier))'
+        $PatternServerName     = '(?<=(on computer ))(.*)(?=(configured))'
+        $PatternTenantName     = '(?<=(to tenant ))(.*)(?=(. This))'
+        $PatternInstallationID = '(?<=(installation identifier ))(.*)(?=( running on ))'
         if ($Desc -match $PatternServerName) {
             $ServerName = ($Matches[0]).Replace("'", '').Replace(' ', '')
             If ($Desc -match $PatternTenantName)     {
@@ -42,6 +46,25 @@ Function Find-ADConnectServer {
 }
 
 Function Find-ServerTypes {
+    <#
+        .SYNOPSIS
+        Find all server types.
+        .DESCRIPTION
+        Searches AD for servers that host AD Connect, DC, Exchange, Hyper-V, RDS, SQL, VMs, or All.
+        .PARAMETER Type
+        What kinds of servers are you looking for - the following are valid
+          * ADConnect
+          * DomainController
+          * Exchange
+          * Hyper-V
+          * RDSLicense
+          * SQL
+          * VirtualMachine
+          * All
+        .EXAMPLE
+        Find-ServerTypes -Type All
+        Returns all servers in domain that can match one of the server types.
+    #>
     [cmdletbinding()]
     Param(
         [ValidateSet(
@@ -61,7 +84,7 @@ Function Find-ServerTypes {
         Try {
             $DomainInformation = Get-ADDomain -Server $Domain -ErrorAction Stop
         } Catch {
-            Write-Warning "Find-ServerTypes - Domain $Domain couldn't be reached. Skipping"
+            Write-Warning -Message ("Find-ServerTypes - Domain {0} couldn't be reached. Skipping" -f $Domain)
             Continue
         }
         Try {
@@ -72,12 +95,12 @@ Function Find-ServerTypes {
             }
             $ServiceConnectionPoint = Get-ADObject @SPParams
             ForEach ($Point in $ServiceConnectionPoint) {  
-                $Temporary         = $Point.DistinguishedName.split(",")            
-                $DistinguishedName = $Temporary[1..$Temporary.Count] -join ","    
+                $Temporary         = $Point.DistinguishedName.split(',')            
+                $DistinguishedName = $Temporary[1..$Temporary.Count] -join ','    
                 $Point | Add-Member -MemberType 'NoteProperty' -Name 'DN' -Value $DistinguishedName -Force
             }
         } Catch {
-            Write-Error "Find-ServerTypes - Get-ADObject command failed. Terminating. Error $_"
+            Write-Error -Message ('Find-ServerTypes - Get-ADObject command failed. Terminating. Error {0}' -f $_)
             Return
         }
         $ADConnect = Find-ADConnectServer
@@ -197,7 +220,3 @@ Function Find-ServerTypes {
 $SQL = Find-ServerTypes -Type All
 $SQL | Out-GridView -Title "$($SQL.Count) Results"
 #$SQL | Export-CSV -Path "C:\down\ServerTypes_011123.csv" -Encoding UTF8 -Delimiter ','
-
-#Find-ServerTypes | 
-#Select-Object -Property Name, FQDN, OperatingSystem, DistinguishedName, Enabled, IsExchange, IsSQL, IsVM, IsHyperV, IsSPHyperv, IsRDSLicense, IsDC, IsADConnect, Forest, Domain | 
-#Out-GridView -Title "Servers Found with various columns of potential jobs they have"
