@@ -51,3 +51,6 @@ Function Find-LANHosts {
 #$results = Find-LANHosts -ip @(1..255|%{"192.168.2.$_"}) -OutVariable lanresults
 #$results | Select IP,@{n='MACAddress';e={$_.MACAddress.replace('-',':').toUpper()}}
 #Find-LANHosts -ip @(1..255|%{"192.168.2.$_"}) -OutVariable lanresults | Select IP,@{n='MACAddress';e={$_.MACAddress.replace('-',':').toUpper()}}
+
+Find-LANHosts -ip @(1..255 | ForEach-Object {"192.168.2.$_"}) -OutVariable lanresults | 
+Select-Object -Property IP,@{n='MACAddress';e={$_.MACAddress.replace('-',':').toUpper()}}
