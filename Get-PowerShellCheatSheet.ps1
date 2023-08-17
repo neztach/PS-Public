@@ -302,10 +302,14 @@ Invoke-RestMethod @Params                                   # Call a REST API, u
 
 #endregion Basics
 
+###################################################
 #region Active Directory
+###################################################
 
 #region Support Functions
+###################################################
 ### Check if we are running as admin
+###################################################
 # PowerShell 5.x only runs on Windows so use .NET types to determine isAdminProcess
 # -OR If we are on v6 or higher, check the $IsWindows pre-defined variable.
 If (($PSVersionTable.PSVersion.Major -le 5) -or $IsWindows) {
@@ -314,10 +318,14 @@ If (($PSVersionTable.PSVersion.Major -le 5) -or $IsWindows) {
 }
 Write-Output (0 -eq (id -u)) # Must be Linux or OSX, so use the id util. Root has userid of 0.
 
+###################################################
 ### Test if computer is trusted to domain
+###################################################
 Test-ComputerSecureChannel -Verbose
 
+###################################################
 ### Change size output to human readable format
+###################################################
 $size = ''                                                ### Size is usually populated by a command that gets a file size
 Switch ($size) {
     {$_ -ge 1PB} {"{0:#.#' PB'}" -f ($size / 1PB); Break}
@@ -328,7 +336,9 @@ Switch ($size) {
     default      {'{0:n0}' -f ($size) + ' Bytes'}
 }
 
+###################################################
 ### Unix equivalent of touch
+###################################################
 $file = 'path\to\filename.ext'
 If (Test-Path -Path $file){
     (Get-ChildItem -Path $file).LastWriteTime = Get-Date
@@ -336,7 +346,9 @@ If (Test-Path -Path $file){
     Write-Output -InputObject $null > $file
 }
 
+###################################################
 ### Convert Phone numbers to a standardized format
+###################################################
 Function Convert-StandardPhone ([String]$N) {
     If ($N -match '[0-9]'){
         $p = $N -replace '[^0-9]',''
@@ -358,9 +370,38 @@ Function Convert-StandardPhone ([String]$N) {
     Return $PN
 }
 ### Usage: Get-ADUser $env:USERNAME -prop mobile | Select @{n='mobile';e={Convert-StandardPhone $_.mobile}}
+
+###################################################
+### Find empty OUs
+###################################################
+$ad_objects = Get-ADObject -Filter "ObjectClass -eq 'user' -or ObjectClass -eq 'computer' -or ObjectClass -eq 'group' -or ObjectClass -eq 'organizationalUnit'"
+$aOuDns     = @()
+ForEach ($o in $ad_objects) {
+    If ($o.DistinguishedName -like '*OU=*' -and $o.DistinguishedName -notlike '*LostAndFound*') {
+        $aOuDns += $o.DistinguishedName.Substring($o.DistinguishedName.IndexOf('OU='))
+    }
+}
+$a0CountOus = $aOuDns | Group-Object | Where-Object {$_.Count -eq 1} | ForEach-Object {$_.Name}
+$empty_ous  = 0
+ForEach ($sOu in $a0CountOus) {
+    If (-not 
+        (
+            Get-ADObject -Filter "ObjectClass -eq 'organizationalUnit'" | 
+            Where-Object {$_.DistinguishedName -like "*$sOu*" -and $_.DistinguishedName -ne $sOu}
+        )
+    ) {
+        $ou = Get-AdObject -Filter {DistinguishedName -eq $sOu}
+        $ou
+        $empty_ous++
+    }
+}
+Write-Output -InputObject "-------------------`nTotal Empty OUs: $empty_ous"
 #endregion Support Functions
 
+###################################################
 #region Schema Level
+###################################################
+
 ### Get Schema Version
 $SchemaVersion = (Get-ADObject -Identity (Get-ADRootDSE).schemaNamingContext -Properties objectVersion).objectVersion
 Switch ($SchemaVersion) {
@@ -376,19 +417,25 @@ Switch ($SchemaVersion) {
 }
 #endregion Schema Level
 
+###################################################
 #region Domain Controllers
+###################################################
+
 (Get-AdDomainController -Filter {OperationMasterRoles -like '*PDCEmulator*'}).HostName ### Get the Primary Domain Controller Emulator
 
 ### Get List of all Domain Controllers including which have FSMO Roles
 Get-AdDomainController -Filter * | 
 Select-Object -Property Forest, Name, OperatingSystem, IPv4Address, Site, OperationMasterRoles | 
 Format-Table -Autosize
-
 #endregion Domain Controllers
 
+###################################################
 #region DNS & IPs
+###################################################
 
+###################################################
 ### Check if IP address given is a valid format
+###################################################
 Function Get-IPValid ([String]$testip) {
     If ($testip -ne '0.0.0.0') {
         ### REGEX Pattern
@@ -405,7 +452,9 @@ Function Get-IPValid ([String]$testip) {
     }
 }
 
+###################################################
 ### Get a list of all DNS Servers
+###################################################
 $DNSServers = @()
 $Results    = (
     (
@@ -432,12 +481,17 @@ $DNSServers | Group-Object -Property Name,IP | ForEach-Object {
 $results | Format-Table -AutoSize
 #endregion DNS & IPs
 
+###################################################
 ### Get Bitlocker Password
+###################################################
 $C = Get-ADComputer -Identity 'ComputerName'
 Get-ADObject -Filter {objectclass -eq 'msFVE-RecoveryInformation'} -SearchBase $C.DistinguishedName -Properties 'msFVE-RecoveryPassword' | 
 Select-Object -ExpandProperty 'msFVE-RecoveryPassword'
 
+###################################################
 #region Getting AD user objects
+###################################################
+
 Get-ADUser -Identity 'samaccountname'                     ### Standard basic get AD User
 Get-ADUser -Filter {} `                                   ### Attribute -(ceq/eq/ne $true/$false) -(AND/OR) Attribute -(clike/like/cnotlike/notlike) 'text with wildcards*' etc.
            -SearchBase OU=orgUnit,CN=domain,CN-local `    ### DistinguishedName of an OU
@@ -485,9 +539,13 @@ Search-ADAccount -LockedOut | Select-Object -Property Name, SamAccountName ### G
 Get-ADUser -Identity 'samaccountname' | Unlock-ADAccount                   ### Unlock user
 #endregion Getting user objects
 
+###################################################
 #region Groups
+###################################################
 
+###################################################
 ### Find Empty Groups
+###################################################
 Try {
     $EmptyGroups = @(
         Get-ADGroup -Filter * -Properties isCriticalSystemObject, Members -ErrorAction Stop
@@ -534,28 +592,5 @@ Foreach ($EmptyGroup in $EmptyGroups) {
 Write-Progress -Activity $Act -Status 'Ready' -Completed
 $EmptyGroupTotal | Out-GridView
 
-### Find empty OUs
-$ad_objects = Get-ADObject -Filter "ObjectClass -eq 'user' -or ObjectClass -eq 'computer' -or ObjectClass -eq 'group' -or ObjectClass -eq 'organizationalUnit'"
-$aOuDns     = @()
-ForEach ($o in $ad_objects) {
-    If ($o.DistinguishedName -like '*OU=*' -and $o.DistinguishedName -notlike '*LostAndFound*') {
-        $aOuDns += $o.DistinguishedName.Substring($o.DistinguishedName.IndexOf('OU='))
-    }
-}
-$a0CountOus = $aOuDns | Group-Object | Where-Object {$_.Count -eq 1} | ForEach-Object {$_.Name}
-$empty_ous  = 0
-ForEach ($sOu in $a0CountOus) {
-    If (-not 
-        (
-            Get-ADObject -Filter "ObjectClass -eq 'organizationalUnit'" | 
-            Where-Object {$_.DistinguishedName -like "*$sOu*" -and $_.DistinguishedName -ne $sOu}
-        )
-    ) {
-        $ou = Get-AdObject -Filter {DistinguishedName -eq $sOu}
-        $ou
-        $empty_ous++
-    }
-}
-Write-Output -InputObject "-------------------`nTotal Empty OUs: $empty_ous"
 #endregion Groups
 #endregion Active Directory
